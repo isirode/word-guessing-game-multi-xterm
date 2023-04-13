@@ -1,0 +1,59 @@
+@import 'npm:xterm/css/xterm.css';
+
+body {
+  width: 100%;
+  height: 100vh;
+  margin: 0px;
+  box-sizing: border-box;
+  /* Info : this hide the empty white spaces, but the scrollbars are still not fitting 
+      And it had a scroll bar for the whole body
+  */
+  background-color: #2D2E2C;
+  /*overflow: hidden;*/
+}
+
+#promptTerm {
+  border: 1px solid blue;
+  width: 100%;
+  height: 40%;
+}
+
+#messageTerm {
+  border: 1px solid green;
+  width: 100%;
+  height: 60%;
+}
+
+/*
+#terminal {
+  width: 100%;
+  height: 100%;
+}
+*/
+/* When there is 3 terms
+#scoreTerm {
+  border: 1px solid red;
+  width: 100%;
+  height: 20%;
+}
+
+#promptTerm {
+  border: 1px solid blue;
+  width: 100%;
+  height: 40%;
+}
+
+#messageTerm {
+  border: 1px solid green;
+  width: 100%;
+  height: 40%;
+}
+*/
+/*
+#testTerm {
+  margin-top: 5px;
+  width: 100%;
+  height: 20%;
+  display: none;
+}
+*/

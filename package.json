@@ -1,0 +1,36 @@
+{
+  "name": "word-guessing-game-multi-xterm",
+  "version": "1.0.0",
+  "description": "Multiplayer word guessing game with a terminal look",
+  "source": "public/index.html",
+  "scripts": {
+    "start": "parcel --no-cache",
+    "prebuild": "rimraf dist",
+    "build": "parcel build --public-url ./",
+    "test": "jest --config jest.config.js"
+  },
+  "author": "Isirode",
+  "license": "AGPLv3",
+  "dependencies": {
+    "cmdy": "^1.4.6",
+    "commander": "^10.0.0",
+    "dexie": "^3.2.3",
+    "peerjs": "^1.3.3",
+    "pure-rand": "^6.0.1",
+    "sql.js": "^1.8.0",
+    "word-guessing-game-common": "1.0.0",
+    "word-guessing-lib": "1.0.0",
+    "xterm": "^5.1.0",
+    "xterm-addon-fit": "^0.7.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.14.4",
+    "@types/sql.js": "^1.4.4",
+    "buffer": "^5.7.1",
+    "parcel": "^2.8.3",
+    "path-browserify": "^1.0.1",
+    "rimraf": "^4.1.3",
+    "stream-browserify": "^3.0.0",
+    "string_decoder": "^1.3.0"
+  }
+}
