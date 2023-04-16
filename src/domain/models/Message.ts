@@ -11,7 +11,8 @@ export enum WordGameMessageType {
   GuessTimeout = 'guess-timeout',
   PlayerWon = 'player-won',
   WordExample = 'word-example',
-  UpdateSettings = 'update-settings'
+  UpdateSettings = 'update-settings',
+  RemovePlayer = "remove-player"
 }
 
 export function isRoomMessageTypeProtected (wordGameMessageType: WordGameMessageType) {
@@ -27,23 +28,23 @@ export function isRoomMessageTypeProtected (wordGameMessageType: WordGameMessage
 // TODO : most messages should indicate the target so that it can be optionnaly transitionned to an full admin architecture
 
 export interface WordGameMessage extends AnyMessage {
-  wordGameMessageType: WordGameMessageType
-  payload: any
+  wordGameMessageType: WordGameMessageType;
+  payload: any;
 }
 
 export interface ChatMessage {
-  message: string
+  message: string;
 }
 export interface StartingGameMessage {
   playersIds: string[];
 }
 export interface LettersToGuessMessage {
-  letters: string
+  letters: string;
   timeToGuess: number;
   // FIXME : should it be 'peerId', 'playerPeerId' or keep it this way
   // It make it more difficult to maintain
   // But one could want to redefine users
-  playerId: string
+  playerId: string;
 }
 export interface WordGuessMessage {
   word: string;
@@ -90,6 +91,9 @@ export interface SetRoomAdminMessage {
 }
 export interface UpdateSettingsMessage {
   settings: IWordGameMultiSettings;
+}
+export interface RemovePlayerMessage {
+  playerId: string;
 }
 
 // FIXME : what to do with these

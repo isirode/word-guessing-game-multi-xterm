@@ -192,7 +192,8 @@ console.log(peer);
 
 const peerJSClient = new PeerJSServerClient({
   host: config.peerServerHostname,
-  port: config.peerServerPort
+  port: config.peerServerPort,
+  secure: config.secure,
 });
 
 const roomManager = new RoomManager(peerJSClient);
@@ -341,6 +342,9 @@ const start: CmdDefinition = {
   }
 }
 
+// TODO : command go to launch the game
+// And /start would not start, just init the players
+
 // const game: CmdDefinition = {
 //   name: "/game",
 //   description: "Set a game",
@@ -425,6 +429,117 @@ const players: CmdDefinition = {
   }
 }
 
+const id: ValueFlag = {
+  name: "id",
+  description: "Id of the player",
+  shorthand: "i",
+  types: ["string"],
+  required: false,
+}
+
+// TODO : by name etc
+const remove: CmdDefinition = {
+  name: "remove",
+  description: "Remove a player from the current game",
+  flags: [
+    id
+  ],
+  exe: async (res) => {
+    console.log("remove");
+    console.log(res.flags);
+    console.log(res.valueFlags);
+
+    if (wordGameMulti === undefined) {
+      logger.writeLn('You are not in game.');
+      return;
+    }
+
+    const id: string = res.valueFlags['id'];
+
+    if (id !== undefined) {
+      wordGameMulti.removePlayerByPeerId(id);
+    }
+  }
+}
+
+const helpSettings: CmdDefinition = {
+  name: "help",
+  description: "Helper",
+  flags: [
+  ],
+  exe(res) {
+    console.log("helpSettings");
+    console.log(res.flags);
+    console.log(res.valueFlags);
+
+    if (wordGameMulti === undefined) {
+      logger.writeLn('You are not in game.');
+      return;
+    }
+
+    logger.writeLn('The settings are : '+ Object.getOwnPropertyNames(wordGameMulti.settings).join(', '))
+  },
+}
+
+const property: ValueFlag = {
+  name: "prop",
+  description: "Property to update",
+  shorthand: "p",
+  types: ["string"],
+  required: true,
+}
+
+// TODO : indicate the properties in the help command
+const modifySettings: CmdDefinition = {
+  name: "settings",
+  description: "Modify the settings",
+  flags: [
+    property
+  ],
+  cmds: [
+    helpSettings
+  ],
+  exe: async (res) => {
+    console.log("modifySettings");
+    console.log(res.flags);
+    console.log(res.valueFlags);
+
+    if (wordGameMulti === undefined) {
+      logger.writeLn('You are not in game.');
+      return;
+    }
+
+    const prop: string = res.valueFlags['prop'];
+
+    if (prop !== undefined) {
+      const splitted = prop.split('=');
+      if (splitted.length !== 2) {
+        console.warn("prop " + prop + " is not correctly formatted");
+        return;
+      }
+      try {
+        wordGameMulti.modifySettingsProperty(splitted[0], splitted[1]);
+      } catch (error) {
+        console.error(error);
+        console.log(Object.getOwnPropertyNames(wordGameMulti.settings));
+        logger.writeLn('An error occurred');
+        logger.writeLn('Maybe, you did not type a correct key, try with one of these: '+ Object.getOwnPropertyNames(wordGameMulti.settings).join(', '))
+      }
+    }
+  }
+}
+
+const game: CmdDefinition = {
+  name: "/game",
+  description: "Game commands",
+  flags: [
+  ],
+  cmds: [
+    remove,
+    modifySettings
+  ]
+}
+
 const root: CmdDefinition = {
   name: "",
   description: "",
@@ -433,6 +548,7 @@ const root: CmdDefinition = {
       leave,
       connections,
       players,
+      game,
   ],
    flags: [
       // version
@@ -587,7 +703,10 @@ const wordGameMessageHandler: WordGameMessageHandler = {
   onSettingsUpdated: function (newSettings: IWordGameMultiSettings, formerSettings: IWordGameMultiSettings, player: Player, admin: Player): void {
     logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatSettingsWereUpdated(player.user.name)}`);
     logger.writeLn(`${wordGameMessagingEN.formatSettings(newSettings)}`);
-  }
+  },
+  onPlayerRemoved(player: Player, from: Player, admin: Player) {
+    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatPlayerWasRemoved(player.user.name, isSelf(player))}`);
+  },
 };
 
 const animalNames = ['Dog', 'Bear', 'Duck', 'Cat', 'Turtle', 'Horse', 'Crocodile', 'Chicken', 'Dolphin'];
@@ -811,8 +930,12 @@ async function main() {
         break;
       case '\u0003': // Ctrl+C
         if (wordGame.isGuessing) {
-          wordGame.reset();
-          writeOut('You are no longer playing.');
+          // wordGame.reset();
+          // writeOut('You are no longer playing.');
+          // Info : none of them are working
+          console.log(promptTerm.getSelection());
+          console.log(messageTerm.getSelection());
+          console.log(window.getSelection().toString());
         } else {
           promptTerm.writeNoHistory('^C');
           prompt();

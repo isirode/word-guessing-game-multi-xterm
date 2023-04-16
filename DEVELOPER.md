@@ -141,6 +141,8 @@
   - Study the possibility to add a plugin system
     - To handle the echo system, remove user system etc
 
+- Allow to reference the HTTPS remote host as the PeerJS server
+
 ## Info (parcel / typescript import pathing)
 
 https://parceljs.org/features/dependency-resolution/#tilde-specifiers

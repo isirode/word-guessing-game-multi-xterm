@@ -2,7 +2,7 @@ import { IRoom } from './models/Room';
 import {
   WordGameMessageType, ChatMessage, StartingGameMessage,
   LettersToGuessMessage, WordGuessMessage, IncorrectGuessMessage, CorrectGuessMessage, GuessTimeoutMessage,
-  PlayerWonMessage, UpdatePlayerNameMessage, isRoomMessageTypeProtected, WordExampleMessage, UpdateSettingsMessage, WordGameMessage
+  PlayerWonMessage, UpdatePlayerNameMessage, isRoomMessageTypeProtected, WordExampleMessage, UpdateSettingsMessage, WordGameMessage, RemovePlayerMessage
 } from './models/Message';
 import { Connection } from './models/Connection';
 import { ITimer } from './models/Timer';
@@ -27,6 +27,8 @@ export interface WordGameMessageHandler {
 
   onWordExample: (example: string, sequence: string, admin: Player) => void;
   onSettingsUpdated: (newSettings: IWordGameMultiSettings, formerSettings: IWordGameMultiSettings, player: Player, admin: Player) => void;
+
+  onPlayerRemoved: (player: Player, from: Player, admin: Player) => void;
 }
 
 export type OnMessagePushed = (message: Message) => void;
@@ -38,6 +40,8 @@ export type OnMessagePushed = (message: Message) => void;
 // difficult to test
 
 // TODO : remove player if disconnect ?
+
+export type KeyOfSettings = keyof IWordGameMultiSettings;
 
 export class WordGameMulti {
 
@@ -670,6 +674,10 @@ export class WordGameMulti {
         );
 
         break;
+      case WordGameMessageType.RemovePlayer:
+        const removePlayerMessage = message.payload as RemovePlayerMessage;
+
+        this.removePlayerByPeerId(removePlayerMessage.playerId, true);
       default:
         console.warn('received unknown message type ' + message.wordGameMessageType);
         console.warn(message);
@@ -763,11 +771,20 @@ export class WordGameMulti {
 
   public updateSettings (settings: IWordGameMultiSettings) {
     if (!this.isAdmin) {
-      return
+      this.wordGameMessageHandler.onAdminActionAttempted(
+        this.localPlayer,
+        WordGameMessageType.UpdateSettings,
+        this.getAdmin()
+      );
+      return;
     }
     this.settings = { ...settings }
     this.wordGame.wordGameOptions = settings;
 
+    this.broadcastNewSettings();
+  }
+
+  public broadcastNewSettings() {
     const updateSettingsMessage: UpdateSettingsMessage = {
       settings: this.settings
     }
@@ -777,6 +794,118 @@ export class WordGameMulti {
     } as WordGameMessage;
 
     this.p2pRoom.broadcastApplicationMessage(message);
+  }
+
+  public removePlayerByPeerId(id: string, locally: boolean = false): Player {
+    if (!this.isAdmin && !locally) {
+      this.wordGameMessageHandler.onAdminActionAttempted(
+        this.localPlayer,
+        WordGameMessageType.RemovePlayer,
+        this.getAdmin()
+      );
+      return undefined;
+    }
+
+    // TODO : implement it but transfer admin rights
+    if (this.localPlayer?.user.peer.id === id) {
+      console.warn("attempt to remove yourself from the room");
+      return;
+    }
+
+    const newPlayers = [];
+    let removedPlayer: Player = undefined;
+    this.players.forEach((player: Player) => {
+      if (player.user.peer.id === id) {
+        removedPlayer = player;
+        return;
+      }
+      newPlayers.push(player);
+    });
+    if (removedPlayer !== undefined) {
+
+      this.players = newPlayers;
+
+      if (!locally) {
+        const removePlayerMessage: RemovePlayerMessage = {
+          playerId: id,
+        }
+        const message = {
+          wordGameMessageType: WordGameMessageType.RemovePlayer,
+          payload: removePlayerMessage
+        } as WordGameMessage;
+    
+        this.p2pRoom.broadcastApplicationMessage(message);
+
+        // TODO : fix ids
+        // TODO : fix turn
+      }
+
+      this.wordGameMessageHandler.onPlayerRemoved(
+        removedPlayer,
+        this.localPlayer,
+        this.getAdmin()
+      );
+
+      return removedPlayer;
+
+    } else {
+      // TODO : log amessage
+      console.warn(`Player of id ${id} was not found`);
+      return undefined;
+    }
+  }
+
+  public modifySettingsProperty(propertyName: string, propertyValue: string): void {
+    if (!this.isAdmin) {
+      // FIXME : not exactly that
+      this.wordGameMessageHandler.onAdminActionAttempted(
+        this.localPlayer,
+        WordGameMessageType.UpdateSettings,
+        this.getAdmin()
+      );
+      return undefined;
+    }
+
+    // Info : this does nothing, it will return a string either way
+    const key: KeyOfSettings = propertyName as KeyOfSettings;
+
+    const formerSettings = { ...this.settings };
+
+    // Info : we could assign the property this way
+    // this.settings[propertyName] = propertyValue;
+    // But this is cleaner
+    switch (key) {
+      case 'guessAsSession':
+        let value = /true/.test(propertyValue);
+        this.settings.guessAsSession = value;
+        break;
+      case 'maxAttempts':
+        this.settings.maxAttempts = Number.parseInt(propertyValue, 10);
+        break;
+      case 'minOccurences':
+        this.settings.minOccurences = Number.parseInt(propertyValue, 10);
+        break;
+      case 'maxOccurences':
+        this.settings.maxOccurences = Number.parseInt(propertyValue, 10);
+        break;
+      case 'timePerGuess':
+        this.settings.timePerGuess = Number.parseInt(propertyValue, 10);
+        break;
+      case 'winningScore':
+        this.settings.winningScore = Number.parseInt(propertyValue, 10);
+        break;
+      default:
+        throw new Error('key ' + propertyName + ' is unknown');
+    }
+
+    this.broadcastNewSettings();
+    
+    this.wordGameMessageHandler.onSettingsUpdated(
+      this.settings,
+      formerSettings,
+      this.localPlayer,
+      this.getAdmin()
+    );
   }
 
   // #endregion

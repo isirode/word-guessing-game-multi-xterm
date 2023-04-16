@@ -69,4 +69,8 @@ export class WordGameMessagingEN implements IWordGameMessaging {
   formatSettingsWereUpdated (player: string): string {
     return player + ' has updated the settings'
   }
+
+  formatPlayerWasRemoved (player: string, isSelf: boolean): string {
+    return (isSelf ? 'You were' : 'The player ' + player + " was") + " removed from the game";
+  }
 }

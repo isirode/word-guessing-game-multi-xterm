@@ -6,7 +6,7 @@
   "scripts": {
     "start": "parcel --no-cache",
     "prebuild": "rimraf dist",
-    "build": "parcel build --public-url ./",
+    "build": "npm run prebuild & parcel build --no-optimize --no-scope-hoist --public-url ./",
     "test": "jest --config jest.config.js"
   },
   "author": "Isirode",
