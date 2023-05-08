@@ -1,11 +1,25 @@
 import Peer from 'peerjs';
 import * as PeerJS from 'peerjs';
 import { Config } from './config/Config';
+import pWaitFor from 'p-wait-for';
 
-export function createPeer(config: Config): Peer {
+export async function createPeer(config: Config): Promise<Peer> {
+  console.log('iceServers:');
+  console.log(config.iceServers);
+  
   const peer = new Peer({
     host: config.peerServerHostname,
-    port: config.peerServerPort
+    port: config.peerServerPort,
+    config: {
+      iceServers: config.iceServers
+    }
+  });
+
+  await pWaitFor(() => {
+    return peer.id !== undefined && peer.id !== null;
+  }, {
+    timeout: 5000,
+    interval: 1000,
   });
   
   peer.on('connection', (connection: PeerJS.DataConnection) => {

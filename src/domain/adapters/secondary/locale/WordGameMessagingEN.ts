@@ -24,8 +24,8 @@ export class WordGameMessagingEN implements IWordGameMessaging {
     return `Configuration is : timer per guess=${settings.timePerGuess}s, winning score=${settings.winningScore}, max attempts=${settings.maxAttempts}, min occurences=${settings.minOccurences}, max occurences=${settings.maxOccurences}`;
   }
 
-  formatPlayerMustGuessLetters (player: string, letters: string, timeToGuess: number, isSelf: boolean): string {
-    return (isSelf ? 'You' : 'player ' + player) + ' must guess a word containing ' + letters + ` (${timeToGuess}s remaining)`;
+  formatPlayerMustGuessLetters (player: string, letters: string, timeToGuess: number, occurences: number, isSelf: boolean): string {
+    return (isSelf ? 'You' : 'player ' + player) + ' must guess a word containing ' + letters + ` (${timeToGuess}s remaining, ${occurences} words contains this sequence)`;
   }
 
   formatPlayerHasWon (player: string, score: number, isSelf: boolean): string {

@@ -10,26 +10,30 @@ function formatRoomForCmdLine(room: IRoom) {
   return `id: ${room.roomId}, name: ${room.roomName}, owner: ${room.roomOwner?.id}, players: ${room.clients?.size}`;
 }
 
-export type JoinRoomCallback = (room: IRoom) => void;
+export type PeerProvider = () => Promise<Peer>;
+export type JoinedRoomCallback = (room: IRoom, peer: Peer) => void;
+export type CreatedRoomCallback = (room: IRoom, peer: Peer) => void;
 
 // TODO : replace the writeLn by a writeLnError or equivalent
 export class RoomCommand extends XtermCommand {
 
   // FIXME : replace by an interface
   roomManager: RoomManager;
-  peer: Peer;
+  peerProvider: PeerProvider;
   configureCommand: ConfigureCommand;
 
-  joinRoomCallback: JoinRoomCallback;
+  joinedRoomCallback: JoinedRoomCallback;
+  createdRoomCallback: CreatedRoomCallback;
 
-  constructor(roomManager: RoomManager, peer: Peer,  configureCommand: ConfigureCommand, logger: Logger, joinRoomCallback: JoinRoomCallback) {
+  constructor(roomManager: RoomManager, peerProvider: PeerProvider,  configureCommand: ConfigureCommand, logger: Logger, joinRoomCallback: JoinedRoomCallback, createdRoomCallback: CreatedRoomCallback) {
     super(logger);
 
     this.roomManager = roomManager;
-    this.peer = peer;
+    this.peerProvider = peerProvider;
     this.configureCommand = configureCommand;
 
-    this.joinRoomCallback = joinRoomCallback;
+    this.joinedRoomCallback = joinRoomCallback;
+    this.createdRoomCallback = createdRoomCallback;
   }
 
   public setup(): void {
@@ -77,30 +81,21 @@ export class RoomCommand extends XtermCommand {
         console.log('room: ' + roomId + ', password: ' + password)
         this.logger.newLine();
         try {
-          const room = await this.roomManager.joinRoom(roomId, this.peer.id);
+          const peer = await this.peerProvider();
+          console.log("peer:");
+          console.log(peer);
+          console.log("peer", peer);
+          console.log(peer.id);
+          console.log(peer._id);
+          const room = await this.roomManager.joinRoom(roomId, peer.id);
           if (!room) {
             console.log('did not join room');
             this.logger.writeLn('We were not able to join the room');
             return
           }
-          this.logger.writeLn('Room joined');
-          // this.logger.writeLn('Fetching the room.');
+          console.log('Room joined');
 
-          const self = this;
-          // TODO : logs the clients, but using something nice
-          room.clients.forEach((value: IClient, key: string) => {
-            if (value.id === self.peer.id) return;
-
-            console.log('connections')
-            console.log(self.peer.connections);
-            const connection = self.peer.connect(value.id);
-            
-            self.logger.writeLn(`Connected to ${value.id}`);
-            // TODO
-            // this.bindConnection(connection)
-          });
-
-          this.joinRoomCallback(room);
+          this.joinedRoomCallback(room, peer);
 
         } catch (error) {
           console.error(error);
@@ -135,8 +130,14 @@ export class RoomCommand extends XtermCommand {
         }
         try {
           console.log("creating room");
-          const createdRoom = await this.roomManager.createRoom(room, this.peer.id);
+          // TODO : callback to return the peer
+          const peer = await this.peerProvider();
+
+          const createdRoom = await this.roomManager.createRoom(room, peer.id);
           this.logger.writeLn(`The room was created (${formatRoomForCmdLine(createdRoom)})`);
+
+          this.createdRoomCallback(createdRoom, peer);
+
         } catch (error) {
           this.logger.writeLn(`An error occurred while attempting to create the room (${error})`);
         }

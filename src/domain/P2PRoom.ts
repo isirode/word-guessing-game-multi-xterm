@@ -2,6 +2,7 @@ import prand from "pure-rand";// TODO : checkout other random libraries
 import { Connection } from "./models/Connection";
 import { IPeer, Peer } from "./models/Peer"
 import * as PeerJS from 'peerjs'
+import { IClient, IRoom } from "./models/Room";
 
 export interface User {
   peer: IPeer;
@@ -33,6 +34,9 @@ export function sanitizeUser(user: User) {
 // then we cast the body
 
 //#region 'Messaging Protocol'
+
+// TODO : add possibility to add application level messages at the root ? based on an option
+// It would improve performance, lightly
 
 // TODO : add app version and protocole version in the message
 
@@ -86,9 +90,12 @@ export function getApplicationMessage(from: User, payload: AnyMessage): Message 
 // FIXME : is declaring user as User or undefined necessary ?
 export interface RoomMessageHandler {
   // technical
+  onAttemptingConnections: (room: IRoom) => void;
   onConnectionEstablished: (connection: PeerJS.DataConnection, user: User) => void;
   onConnectionClosed: (connection: PeerJS.DataConnection, user: User) => void;
   onConnectionError: (connection: PeerJS.DataConnection, user: User, error: any) => void;
+  onMissingConnections: (clients: IClient[]) => void;
+  onAllConnected: () => void;
   // messaging
   onTextMessage: (connection: PeerJS.DataConnection, user: User | undefined, text: string, textMessage: TextMessage, root: Message) => void;
   onRenameUserMessage: (connection: PeerJS.DataConnection, user: User | undefined, newName: string, formerName: string, renameUserMessage: RenameUserMessage, root: Message) => void;
@@ -109,6 +116,8 @@ export class P2PRoom {
 
   localUser: LocalUser;
 
+  room: IRoom;
+
   users:  Map<string, User> = new Map();
 
   names: string[] = [];
@@ -120,8 +129,9 @@ export class P2PRoom {
 
   appMessageHandler: AppMessageHandler;
 
-  constructor(localUser: LocalUser, roomMessageHandler: RoomMessageHandler, appMessageHandler: AppMessageHandler, names: string[] = []) {
+  constructor(localUser: LocalUser, room: IRoom, roomMessageHandler: RoomMessageHandler, appMessageHandler: AppMessageHandler, names: string[] = []) {
     this.localUser = localUser;
+    this.room = room;
     this.roomMessageHandler = roomMessageHandler;
     this.appMessageHandler = appMessageHandler;
     this.names = names;
@@ -129,6 +139,13 @@ export class P2PRoom {
     this.users.set(localUser.peer.id, localUser);
 
     this.bindPeer();
+
+    this.connectToClients();
+
+    setTimeout(() => {
+      let successful = this.verifyRoomConnections();
+      // TODO : initiate the echo here
+    }, 10 * 1000);// TODO : make it configurable
   }
 
   public broadcast (message: Message) {
@@ -156,23 +173,33 @@ export class P2PRoom {
     this.localUser.peer.base.on('connection', (connection: PeerJS.DataConnection) => {
       console.log('connection');
       console.log(connection);
-      this.bindConnection(connection);
+      this.bindConnection(connection, true);
       // FIXME : put this in connection.on('open') ?
       // peer.connections.set(connection.peer, new Connection(connection))
     });
   }
 
-  public bindConnection (connection: PeerJS.DataConnection) {
+  public bindConnection (connection: PeerJS.DataConnection, isEstablished: boolean) {
+    // Info : this method is called when we are attempting to bind an user
+    // And when we have received a connection
+
+    // TODO : compare the room clients and the connections here
+
+    console.log("connection state");
+    console.log(connection.peerConnection.connectionState);
+    console.log("connection reliable: " + connection.reliable);
+    console.log("established: " + isEstablished);
+    
     // FIXME ; remove it or set it back if necessary
     const self = this;
-    console.log('binding connection');
+    console.log('attempt to bind connection');
     console.log('peer ' + connection.peer);
 
     // this.connections.set(connection.peer, new Connection(connection));
 
     // TODO : replace strings events by an enum
     connection.on('open', () => {
-      console.log('connection open to ' + connection.peer);
+      console.log('connection opened to ' + connection.peer);
 
       this.connections.set(connection.peer, new Connection(connection));
 
@@ -226,6 +253,22 @@ export class P2PRoom {
       let user = this.users.get(connection.peer);
       
       this.roomMessageHandler.onConnectionError(connection, error);
+    });
+  }
+
+  public connectToClients() {
+    this.room.clients.forEach((client: IClient, peerId: string) => {
+      if (client.id === this.localUser.peer.id) return;
+
+      console.log('connections');
+      console.log(this.localUser.peer.base.connections);
+
+      const connection = this.localUser.peer.base.connect(client.id);
+
+      // TODO : unit test to add to check we are not adding the connection here (at this level, it could failed at this point)
+      // this.connections.set(connection.peer, new Connection(connection))
+      // TODO : display the connection on 'connecting' et indiquer connected / failed|error
+      this.bindConnection(connection, false);
     });
   }
 
@@ -344,6 +387,44 @@ export class P2PRoom {
       name: localUser.name,
     };
     return user;
+  }
+
+  // TODO : we are not handling the case connection followed by disconnection
+  protected verifyRoomConnections(): boolean {
+    const missingConnections = [];
+
+    if (this.connections.size > this.room.clients.size) {
+      console.warn("too many connections compared to the room");
+      console.log("room.clients.size: " + this.room.clients.size);// TODO : method to map a Map to something else
+      console.log("room.clients:");
+      this.room.clients.forEach((x, k) => {
+        console.log(x.id);
+      });
+      console.log("connections.size: " + this.connections.size);
+      console.log("connections:");
+      this.connections.forEach((connection, k) => {
+        console.log(connection.peer);
+        if (connection._connection.reliable) {
+          console.warn(`Connection ${connection.peer} is not marked as reliable but is marked as connected`);
+        }
+      });
+    }
+
+    this.room.clients.forEach((client: IClient, id: string) => {
+      if (id === this.localUser.peer.id) return;
+
+      if (this.users.get(id) === undefined) {
+        missingConnections.push(client);
+      }
+    });
+    if (missingConnections.length === 0) {
+      this.roomMessageHandler.onAllConnected();
+      return true;
+    } 
+    else {
+      this.roomMessageHandler.onMissingConnections(missingConnections);
+      return false;
+    }
   }
 
   // TODO : maybe use a class for this

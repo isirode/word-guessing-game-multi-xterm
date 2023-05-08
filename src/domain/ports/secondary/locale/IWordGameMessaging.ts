@@ -13,7 +13,7 @@ export interface IWordGameMessaging {
   formatPlayerHasWon(player: string, score: number, isSelf: boolean): string;
   formatWrongPlayerHasWon(currentPlayerPlaying: string, winningPlayer: string): string;
 
-  formatPlayerMustGuessLetters (player: string, letters: string, timeToGuess: number, isSelf: boolean): string;
+  formatPlayerMustGuessLetters (player: string, letters: string, timeToGuess: number, occurences: number, isSelf: boolean): string;
   formatIncorrectGuess(playerName: string, word: string, isSelf: boolean): string;
   formatCorrectGuess(player: string, points: number, isSelf: boolean): string;
   formatTimeToGuessTimedOut(player: string, isSelf: boolean): string;

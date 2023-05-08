@@ -3,6 +3,7 @@ import { IRoom } from "./models/Room";
 
 // TODO : should it be managing the p2p room ? should the p2p room use IRoom ?
 
+// TODO : it is more a server or a client ?
 // TODO : create an interface
 export class RoomManager {
 

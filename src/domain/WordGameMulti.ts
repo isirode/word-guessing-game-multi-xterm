@@ -2,7 +2,7 @@ import { IRoom } from './models/Room';
 import {
   WordGameMessageType, ChatMessage, StartingGameMessage,
   LettersToGuessMessage, WordGuessMessage, IncorrectGuessMessage, CorrectGuessMessage, GuessTimeoutMessage,
-  PlayerWonMessage, UpdatePlayerNameMessage, isRoomMessageTypeProtected, WordExampleMessage, UpdateSettingsMessage, WordGameMessage, RemovePlayerMessage
+  PlayerWonMessage, UpdatePlayerNameMessage, isRoomMessageTypeProtected, WordExampleMessage, UpdateSettingsMessage, WordGameMessage, RemovePlayerMessage, TransferGameAdminshipMessage
 } from './models/Message';
 import { Connection } from './models/Connection';
 import { ITimer } from './models/Timer';
@@ -15,20 +15,20 @@ import { AnyMessage, AppMessageHandler, Message, P2PRoom, User, getApplicationMe
 import { Player, sanitizePlayer } from './models/Player';
 
 export interface WordGameMessageHandler {
-  onStartingGame: (settings: IWordGameMultiSettings, players: Player[], admin: Player) => void;
-  onPlayerWon: (winner: Player, from: Player, admin: Player) => void;
-  onAdminActionAttempted: (player: Player, messageType: WordGameMessageType, admin: Player) => void;
+  onStartingGame(settings: IWordGameMultiSettings, players: Player[], admin: Player): void;
+  onPlayerWon(winner: Player, from: Player, admin: Player): void;
+  onAdminActionAttempted(player: Player, messageType: WordGameMessageType, admin: Player): void;
 
-  onSequenceToGuess: (player: Player, sequence: string, timeToGuess: number, admin: Player) => void;
-  onGuessAttempt: (playerGuessing: Player, word: string, sequence: string, admin: Player) => void;
-  onIncorrectGuess: (playerGuessing: Player, word: string, sequence: string, reason: GuessResult, admin: Player) => void;
-  onCorrectGuess: (playerGuessing: Player, word: string, sequence: string, scoreAdded: number, reason: GuessResult, admin: Player) => void;
-  onGuessTimeout: (player: Player, admin: Player) => void;
+  onSequenceToGuess(player: Player, sequence: string, timeToGuess: number, occurrences: number, admin: Player): void;
+  onGuessAttempt(playerGuessing: Player, word: string, sequence: string, admin: Player): void;
+  onIncorrectGuess(playerGuessing: Player, word: string, sequence: string, reason: GuessResult, admin: Player): void;
+  onCorrectGuess(playerGuessing: Player, word: string, sequence: string, scoreAdded: number, reason: GuessResult, admin: Player): void;
+  onGuessTimeout(player: Player, admin: Player): void;
 
-  onWordExample: (example: string, sequence: string, admin: Player) => void;
-  onSettingsUpdated: (newSettings: IWordGameMultiSettings, formerSettings: IWordGameMultiSettings, player: Player, admin: Player) => void;
+  onWordExample(example: string, sequence: string, admin: Player): void;
+  onSettingsUpdated(newSettings: IWordGameMultiSettings, formerSettings: IWordGameMultiSettings, player: Player, admin: Player): void;
 
-  onPlayerRemoved: (player: Player, from: Player, admin: Player) => void;
+  onPlayerRemoved(player: Player, from: Player, admin: Player): void;
 }
 
 export type OnMessagePushed = (message: Message) => void;
@@ -102,7 +102,7 @@ export class WordGameMulti {
   // }
 
   get currentSequence(): string {
-    if (this.isAdmin) {
+    if (this.isLocalUserAdmin) {
       return this.wordGame.currentSequence;
     }
     return this._currentSequence;
@@ -125,15 +125,19 @@ export class WordGameMulti {
   }
 
   get canUpdateSettings (): boolean {
-    return this.isAdmin && !this.gameStarted;
+    return this.isLocalUserAdmin && !this.gameStarted;
   }
 
   get isGuessing (): boolean {
     return this.localPlayer.user.peer?.id === this.playerIdCurrentlyPlaying;
   }
 
-  get isAdmin (): boolean {
-    return this.room?.roomOwner.id === this.localPlayer.user.peer.id;
+  get adminId (): string {
+    return this._adminId !== "" ? this._adminId : this.room?.roomOwner.id;
+  }
+
+  get isLocalUserAdmin (): boolean {
+    return this.adminId === this.localPlayer.user.peer.id;
   }
 
   // #endregion
@@ -344,6 +348,8 @@ export class WordGameMulti {
           // this.pushMessage(new Message('game (' + this.peer.id + ')', this.localeMessaging.formatPlayerHasWon(playerWonMessage.playerId, playerWonMessage.score), ''))
   
           // TODO : add an option to restart a game if necessary
+          this.gameStarted = false;
+
           this.wordGame.reset();
 
           // TODO : timer to restart the game
@@ -422,9 +428,11 @@ export class WordGameMulti {
     const player = this.players[this.currentId]
 
     this.wordGame.getNewSequence();
+    const occurences = this.wordGame.wordDatabase.getSequenceOccurences(this.wordGame.currentSequence);
     
     const lettersToGuessMessage: LettersToGuessMessage = {
       letters: this.currentSequence,
+      occurences: occurences,
       timeToGuess: this.settings.timePerGuess,
       playerId: player.user.peer.id
     }
@@ -445,6 +453,7 @@ export class WordGameMulti {
       player,
       this.currentSequence,
       this.settings.timePerGuess,
+      occurences,
       this.getAdmin()
     );
 
@@ -490,7 +499,7 @@ export class WordGameMulti {
         this.getAdmin(),
       );
 
-      if (this.isAdmin) {
+      if (this.isLocalUserAdmin) {
         this.verifyGuess(wordGuessMessage);
       }
 
@@ -503,20 +512,20 @@ export class WordGameMulti {
 
   // TODO : bind disconnections to the game
 
-  public handleAppMessage (user: User, anyMessage: AnyMessage, root: Message) {
+  public handleAppMessage (emittor: User, anyMessage: AnyMessage, root: Message) {
     console.log('handleAppMessage');
 
     const message: WordGameMessage = anyMessage as WordGameMessage;
 
     // Info : not necessarely the admin
-    let playerEmittor: Player = this.getPlayerByPeerId(user.peer.id);
+    let playerEmittor: Player = this.getPlayerByPeerId(emittor.peer.id);
 
     if (playerEmittor === undefined) {
       console.warn("player is undefined, should not be");
     }
 
     // TODO : secure this, only admin should send game messages
-    if (isRoomMessageTypeProtected(message.wordGameMessageType) && user.peer.id !== this.room.roomOwner.id) {
+    if (isRoomMessageTypeProtected(message.wordGameMessageType) && emittor.peer.id !== this.room.roomOwner.id) {
       
       console.warn('Received a message of type ' + message.wordGameMessageType + ' which is protected and the player is not an admin');
       
@@ -555,6 +564,7 @@ export class WordGameMulti {
           playerPlaying,
           lettersToGuessMessage.letters,
           lettersToGuessMessage.timeToGuess,
+          lettersToGuessMessage.occurences,
           this.localPlayer
         );
 
@@ -562,7 +572,7 @@ export class WordGameMulti {
       case WordGameMessageType.WordGuess:
         const wordGuessMessage = message.payload as WordGuessMessage;
 
-        if (this.playerIdCurrentlyPlaying !== user.peer.id) {
+        if (this.playerIdCurrentlyPlaying !== emittor.peer.id) {
           console.warn('player attempting to guess when not his turn');// TODO : should probably throw ? could happen at last instant of guess turn
           return;
         }
@@ -570,7 +580,7 @@ export class WordGameMulti {
         // Info : this is for displaying the guesses of the players in Vue
         //player.currentGuess = wordGuessMessage.word
 
-        if (this.isAdmin) {
+        if (this.isLocalUserAdmin) {
           this.verifyGuess(wordGuessMessage)
         }
 
@@ -677,7 +687,11 @@ export class WordGameMulti {
       case WordGameMessageType.RemovePlayer:
         const removePlayerMessage = message.payload as RemovePlayerMessage;
 
-        this.removePlayerByPeerId(removePlayerMessage.playerId, true);
+        this.removePlayerByPeerId(removePlayerMessage.playerId, true, emittor.peer.id);
+      case WordGameMessageType.TransferAdminship:
+          const transferGameAdminshipMessage = message.payload as TransferGameAdminshipMessage;
+  
+          this.doTransferGameAdminship(transferGameAdminshipMessage.newAdminPlayerId);
       default:
         console.warn('received unknown message type ' + message.wordGameMessageType);
         console.warn(message);
@@ -687,7 +701,7 @@ export class WordGameMulti {
 
   public guessTimeout () {
     console.log('guess timeout');
-    if (!this.isAdmin) {
+    if (!this.isLocalUserAdmin) {
       console.log(this)
       console.log('guess timeout, not the owner, doing nothing (' + this.room?.roomOwner.id + '!=' + this.localPlayer.user.peer.id + ')')
       return;
@@ -739,9 +753,10 @@ export class WordGameMulti {
   }
 
   // TODO : use a getter ?
+  private _adminId: string = "";
   public getAdmin(): Player | undefined {
-    const adminId = this.room?.roomOwner;
-    return this.getPlayerByPeerId(adminId.id);
+    let adminId: string = this.adminId;
+    return this.getPlayerByPeerId(adminId);
   }
   
   public getAndSendWordExample () {
@@ -770,7 +785,7 @@ export class WordGameMulti {
   }
 
   public updateSettings (settings: IWordGameMultiSettings) {
-    if (!this.isAdmin) {
+    if (!this.isLocalUserAdmin) {
       this.wordGameMessageHandler.onAdminActionAttempted(
         this.localPlayer,
         WordGameMessageType.UpdateSettings,
@@ -796,8 +811,11 @@ export class WordGameMulti {
     this.p2pRoom.broadcastApplicationMessage(message);
   }
 
-  public removePlayerByPeerId(id: string, locally: boolean = false): Player {
-    if (!this.isAdmin && !locally) {
+  // TODO : test this
+  public removePlayerByPeerId(id: string, isMessage: boolean = false, emitterId: string = ""): Player {
+    const removingOurself = this.localPlayer?.user.peer.id === id;
+
+    if (!this.isLocalUserAdmin && !isMessage &&!removingOurself && emitterId != this.adminId) {
       this.wordGameMessageHandler.onAdminActionAttempted(
         this.localPlayer,
         WordGameMessageType.RemovePlayer,
@@ -807,9 +825,11 @@ export class WordGameMulti {
     }
 
     // TODO : implement it but transfer admin rights
-    if (this.localPlayer?.user.peer.id === id) {
-      console.warn("attempt to remove yourself from the room");
-      return;
+    if (removingOurself) {
+      console.warn("attempt to remove yourself from the game");
+      if (this.isLocalUserAdmin) {
+        this.execTransferGameAdminship()
+      }
     }
 
     const newPlayers = [];
@@ -825,7 +845,7 @@ export class WordGameMulti {
 
       this.players = newPlayers;
 
-      if (!locally) {
+      if (!isMessage) {
         const removePlayerMessage: RemovePlayerMessage = {
           playerId: id,
         }
@@ -856,7 +876,7 @@ export class WordGameMulti {
   }
 
   public modifySettingsProperty(propertyName: string, propertyValue: string): void {
-    if (!this.isAdmin) {
+    if (!this.isLocalUserAdmin) {
       // FIXME : not exactly that
       this.wordGameMessageHandler.onAdminActionAttempted(
         this.localPlayer,
@@ -906,6 +926,52 @@ export class WordGameMulti {
       this.localPlayer,
       this.getAdmin()
     );
+  }
+
+  protected execTransferGameAdminship() {
+    if (!this.isLocalUserAdmin) {
+      console.warn(`attempting to transfer game adminship while not being the admin (which is ${this.adminId}`);
+      return;
+    }
+    if (this.players.length <= 1) {
+      console.warn(`attempting to transfer game ownership while being alone in the game`);
+      return;
+    }
+    let newGameAdminId: string = "";
+    for (const player of this.players) {
+      if (player.user.peer.id === this.localPlayer.user.peer.id) {
+        continue;
+      }
+      newGameAdminId = player.user.peer.id;
+      break;
+    }
+    if (newGameAdminId === "") {
+      console.warn(`did not find a new owner`);
+      return;
+    }
+    // FIXME : find a better way to send messages than this
+    const transferGameAdminshipMessage = {
+      newAdminPlayerId: newGameAdminId,
+    } as TransferGameAdminshipMessage;
+    
+    this.broadcastGameMessage(WordGameMessageType.TransferAdminship, transferGameAdminshipMessage);
+  }
+
+  protected doTransferGameAdminship(newAdminUserId: string) {
+    this._adminId = newAdminUserId;
+  }
+
+  public leave() {
+    this.removePlayerByPeerId(this.localPlayer.user.peer.id, false);
+  }
+
+  protected broadcastGameMessage(messageType: WordGameMessageType, payload: any) {
+    const message = {
+      wordGameMessageType: messageType,
+      payload: payload
+    } as WordGameMessage;
+
+    this.p2pRoom.broadcastApplicationMessage(message);
   }
 
   // #endregion

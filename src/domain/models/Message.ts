@@ -12,14 +12,16 @@ export enum WordGameMessageType {
   PlayerWon = 'player-won',
   WordExample = 'word-example',
   UpdateSettings = 'update-settings',
-  RemovePlayer = "remove-player"
+  RemovePlayer = "remove-player",
+  TransferAdminship = "transfer-adminship",
 }
 
 export function isRoomMessageTypeProtected (wordGameMessageType: WordGameMessageType) {
   if (/*roomMessageType === RoomMessageType.Message ||*/
       /*roomMessageType === WordGameMessageType.UpdatePlayerName ||
       roomMessageType === WordGameMessageType.WordExample*/
-      wordGameMessageType === WordGameMessageType.WordGuess) {
+      wordGameMessageType === WordGameMessageType.WordGuess ||
+      wordGameMessageType === WordGameMessageType.RemovePlayer) {
     return false;
   }
   return true;
@@ -40,6 +42,7 @@ export interface StartingGameMessage {
 }
 export interface LettersToGuessMessage {
   letters: string;
+  occurences: number;
   timeToGuess: number;
   // FIXME : should it be 'peerId', 'playerPeerId' or keep it this way
   // It make it more difficult to maintain
@@ -94,6 +97,9 @@ export interface UpdateSettingsMessage {
 }
 export interface RemovePlayerMessage {
   playerId: string;
+}
+export interface TransferGameAdminshipMessage {
+  newAdminPlayerId: string;
 }
 
 // FIXME : what to do with these

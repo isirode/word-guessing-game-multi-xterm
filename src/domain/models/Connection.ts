@@ -7,7 +7,9 @@ export interface IConnection {
 
 // TODO : implement a complete interface so that PeerJS is used as least as possible
 export class Connection implements IConnection {// We need this to avoid circular references
-  private _connection: PeerJS.DataConnection;
+
+  // FIXME : expore this more properly ?
+  public _connection: PeerJS.DataConnection;
 
   constructor (connection: PeerJS.DataConnection) {
     this._connection = connection;
