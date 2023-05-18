@@ -9,7 +9,8 @@ type StateOrStateProvider =  State | (() => State);
 // FIXME : rename it StateRegister or similar ?
 export class StateRegister {
 
-  currentState: State;
+  currentStateName: string | undefined;
+  protected currentState: State;
   states: Map<string, StateOrStateProvider> = new Map();
 
   register(name: string, state: StateOrStateProvider) {
@@ -35,10 +36,20 @@ export class StateRegister {
     } else {
       state = stateOrProvider;
     }
+    this.currentStateName = name;
     this.currentState = state;
   }
+
+  setCurrentState(name: string, state: State) {
+    this.currentState = state;
+    this.currentStateName = name;
+  }
+
 }
 
+// FIXME : this class seem totally useless for now
+// It was meant to handle the inputs but the virtual input does that
+// We could build the generic state system from this class
 export class StateManager {
 
   stateRegister: StateRegister;

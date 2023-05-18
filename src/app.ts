@@ -579,16 +579,18 @@ async function main() {
       let inOnlineGameState = new InOnlineGameState(logger, vitualInput, roomService, p2pRoom, wordGameMulti);
 
       inOnlineGameState.gameEvents.on('leavedGame', () => {
-        stateManager.stateRegister.currentState = getInRoomState();
+        stateManager.stateRegister.setCurrentState('in-room', getInRoomState());
       });
 
-      stateManager.stateRegister.currentState = inOnlineGameState;
+      // TODO : state should have a name, so that we can query it
+      stateManager.stateRegister.setCurrentState('in-online-game', inOnlineGameState);
     }
 
     logger.writeLn(`You joined the room as ${localUser.name} (${localUser.peer.id})`);
 
     const appMessageHandler = new AppMessageHandlerImpl(logger, roomService, wordGameInitializer, onStartedGame);
 
+    // TODO : move this elsewhere
     const roomMessageHandler = {
       // technical
       onConnectionEstablished: function (connection: Peer.DataConnection, user: User): void {
@@ -644,7 +646,12 @@ async function main() {
     });
     // app
     p2pRoom.events.on('appMessage', ({user, appMessage, root}) => {
-      appMessageHandler.onAppMessage(user, appMessage, root)
+      // TODO : create an enum for the states
+      if (stateManager.stateRegister.currentStateName === 'in-room') {
+        appMessageHandler.onAppMessage(user, appMessage, root)
+      } else if (stateManager.stateRegister.currentStateName !== 'in-online-game') {
+        console.warn(`state should not be '${stateManager.stateRegister.currentStateName}' at this stage`);
+      }
     });
   
     if (localUser.peer.id === room.roomOwner.id) {
@@ -665,7 +672,7 @@ async function main() {
       return inRoomState;
     }
   
-    stateManager.stateRegister.currentState = getInRoomState();
+    stateManager.stateRegister.setCurrentState('in-room',  getInRoomState());
   };
 
   offlineState.roomEvents.on('joinedRoom', onRoomCreatedOrJoined);

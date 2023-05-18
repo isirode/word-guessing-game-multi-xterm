@@ -1,4 +1,4 @@
-import { IRoom } from 'peerjs-room';
+import { AppMessage, IRoom } from 'peerjs-room';
 import {
   WordGameMessageType, StartingGameMessage,
   LettersToGuessMessage, WordGuessMessage, IncorrectGuessMessage, CorrectGuessMessage, GuessTimeoutMessage,
@@ -44,6 +44,8 @@ export type EventsKeys = keyof Events;
 // TODO : remove player if disconnect ?
 
 export type KeyOfSettings = keyof IWordGameMultiSettings;
+
+export const appName: string = "word-guessing";
 
 export class WordGameMulti {
 
@@ -175,6 +177,21 @@ export class WordGameMulti {
 
   // #region "Methods"
 
+  static getWordGameMessage(anyMessage: AnyMessage): WordGameMessage {
+    const appMessage = anyMessage as AppMessage;
+    let message: WordGameMessage;
+    switch (appMessage.app) {
+      case appName:
+        console.log(`casting because app is ${appName}`);
+        message = appMessage.payload as WordGameMessage;
+        console.log(message);
+        break;
+      default:
+        throw new Error(`unknown app ${appMessage.app}`);
+    }
+    return message;
+  }
+
   public startGame () {
     // TODO : only the owner
     console.log('start game');
@@ -207,12 +224,8 @@ export class WordGameMulti {
       playersIds: playersIds,
       lang: this.settings.language as SupportedLanguages,
     }
-    const message: WordGameMessage = {
-      wordGameMessageType: WordGameMessageType.StartingGame,
-      payload: startingGameMessage
-    }
 
-    this.p2pRoom.broadcastApplicationMessage(message);
+    this.broadcastWordGameMessage(WordGameMessageType.StartingGame, startingGameMessage);
 
     // FIXME : Could wait or something else ?
 
@@ -224,10 +237,6 @@ export class WordGameMulti {
     
 
     // this.timer.startTimer()
-
-
-    // FIXME : better way to do this
-    // this.updateLocalPlayerName(this.name)
   }
 
   // TODO : use room or refresh room
@@ -294,6 +303,10 @@ export class WordGameMulti {
       console.warn('player is undefined');
     }
 
+    // Info : variable are not scoped in the switch branch
+    // named are declared in the function scope
+    // unless ifs, for which, the variable is scoped at the statement
+    // wether it is a let or const
     switch (result) {
       case GuessResult.SUCCESSFUL_GUESS:
         console.log('Success !');
@@ -316,13 +329,8 @@ export class WordGameMulti {
           word: wordGuessMessage.word,
           sequence: wordGuessMessage.sequence,
         }
-        // FIXME : we cannot use a single 'message' variable xD
-        let message1: WordGameMessage = {
-          wordGameMessageType: WordGameMessageType.CorrectGuess,
-          payload: correctGuessMessage
-        }
 
-        this.p2pRoom.broadcastApplicationMessage(message1);
+        this.broadcastWordGameMessage(WordGameMessageType.CorrectGuess, correctGuessMessage);
 
         this.wordGameMessageHandler.onCorrectGuess(
           player,
@@ -344,16 +352,10 @@ export class WordGameMulti {
             playerId: player.user.peer.id,
             score: player.score
           }
-          const wordGameMessage: WordGameMessage = {
-            wordGameMessageType: WordGameMessageType.PlayerWon,
-            payload: playerWonMessage
-          };
-          this.p2pRoom.broadcastApplicationMessage(wordGameMessage);
+          this.broadcastWordGameMessage(WordGameMessageType.PlayerWon, playerWonMessage);
 
           this.wordGameMessageHandler.onPlayerWon(player, this.localPlayer, this.getAdmin());
 
-          // this.pushMessage(new Message('game (' + this.peer.id + ')', this.localeMessaging.formatPlayerHasWon(playerWonMessage.playerId, playerWonMessage.score), ''))
-  
           // TODO : add an option to restart a game if necessary
           this.gameStarted = false;
 
@@ -373,12 +375,8 @@ export class WordGameMulti {
           reason: GuessResult.WORD_DO_NOT_EXIST,
           playerId: wordGuessMessage.playerId,
         }
-        let message2: WordGameMessage = {
-          wordGameMessageType: WordGameMessageType.IncorrectGuess,
-          payload: incorrectGuessMessage1
-        }
 
-        this.p2pRoom.broadcastApplicationMessage(message2);
+        this.broadcastWordGameMessage(WordGameMessageType.IncorrectGuess, incorrectGuessMessage1);
 
         this.wordGameMessageHandler.onIncorrectGuess(
           player,
@@ -397,12 +395,8 @@ export class WordGameMulti {
           reason: GuessResult.WORD_DO_NOT_MATCH_SEQUENCE,
           playerId: wordGuessMessage.playerId,
         }
-        let message3: WordGameMessage = {
-          wordGameMessageType: WordGameMessageType.IncorrectGuess,
-          payload: incorrectGuessMessage2
-        }
 
-        this.p2pRoom.broadcastApplicationMessage(message3);
+        this.broadcastWordGameMessage(WordGameMessageType.IncorrectGuess, incorrectGuessMessage2);
 
         this.wordGameMessageHandler.onIncorrectGuess(
           player,
@@ -446,17 +440,12 @@ export class WordGameMulti {
       playerId: player.user.peer.id
     }
 
-    const secondMessage: WordGameMessage = { // TODO : rename
-      wordGameMessageType: WordGameMessageType.LettersToGuess,
-      payload: lettersToGuessMessage
-    }
-
     console.log('current id ' + this.currentId);
     console.log('currentPlayerId ' + this.playerIdCurrentlyPlaying);
 
     this.playerIdCurrentlyPlaying = player.user.peer.id;
 
-    this.p2pRoom.broadcastApplicationMessage(secondMessage);
+    this.broadcastWordGameMessage(WordGameMessageType.LettersToGuess, lettersToGuessMessage);
 
     this.wordGameMessageHandler.onSequenceToGuess(
       player,
@@ -474,10 +463,6 @@ export class WordGameMulti {
   // FIXME : should the responsibility to attempt a guess or send a message be here ?
   public sendMessage (stringMessage: string) {
     console.log("sendMessage");
-
-    let message: WordGameMessage;
-
-    console.log('send message');
     console.log(this.gameStarted);
     console.log(this.isGuessing);
 
@@ -487,10 +472,6 @@ export class WordGameMulti {
         sequence: this.currentSequence,
         language: this.wordGame.currentLanguage,
         playerId: this.localPlayer.user.peer.id,
-      }
-      message = {
-        wordGameMessageType: WordGameMessageType.WordGuess,
-        payload: wordGuessMessage
       }
 
       // FIXME : this was being this way for Vue, so that we can display guesses of the players
@@ -502,7 +483,7 @@ export class WordGameMulti {
       }
       */
 
-      this.p2pRoom.broadcastApplicationMessage(message);
+      this.broadcastWordGameMessage(WordGameMessageType.WordGuess, wordGuessMessage);
 
       this.wordGameMessageHandler.onGuessAttempt(
         this.localPlayer,
@@ -527,7 +508,7 @@ export class WordGameMulti {
   public handleAppMessage (emittor: User, anyMessage: AnyMessage, root: Message) {
     console.log('handleAppMessage');
 
-    const message: WordGameMessage = anyMessage as WordGameMessage;
+    let message: WordGameMessage = WordGameMulti.getWordGameMessage(anyMessage);
 
     // Info : not necessarely the admin
     let playerEmittor: Player = this.getPlayerByPeerId(emittor.peer.id);
@@ -701,10 +682,14 @@ export class WordGameMulti {
         const removePlayerMessage = message.payload as RemovePlayerMessage;
 
         this.removePlayerByPeerId(removePlayerMessage.playerId, true, emittor.peer.id);
+
+        break;
       case WordGameMessageType.TransferAdminship:
           const transferGameAdminshipMessage = message.payload as TransferGameAdminshipMessage;
   
           this.doTransferGameAdminship(transferGameAdminshipMessage.newAdminPlayerId);
+
+          break;
       default:
         console.warn('received unknown message type ' + message.wordGameMessageType);
         console.warn(message);
@@ -734,12 +719,8 @@ export class WordGameMulti {
     const guessTimeoutMessage: GuessTimeoutMessage = {
       playerId: playerPlaying.user.peer.id,
     }
-    const message = {
-      wordGameMessageType: WordGameMessageType.GuessTimeout,
-      payload: guessTimeoutMessage
-    } as WordGameMessage;
 
-    this.p2pRoom.broadcastApplicationMessage(message);
+    this.broadcastWordGameMessage(WordGameMessageType.GuessTimeout, guessTimeoutMessage);
 
     this.getAndSendWordExample();
 
@@ -779,12 +760,8 @@ export class WordGameMulti {
       word: word,
       letters: this.currentSequence
     }
-    const message = {
-      wordGameMessageType: WordGameMessageType.WordExample,
-      payload: wordExampleMessage
-    } as WordGameMessage;
 
-    this.p2pRoom.broadcastApplicationMessage(message);
+    this.broadcastWordGameMessage(WordGameMessageType.WordExample, wordExampleMessage);
 
     this.wordGameMessageHandler.onWordExample(
       word,
@@ -816,12 +793,8 @@ export class WordGameMulti {
     const updateSettingsMessage: UpdateSettingsMessage = {
       settings: this.settings
     }
-    const message = {
-      wordGameMessageType: WordGameMessageType.UpdateSettings,
-      payload: updateSettingsMessage
-    } as WordGameMessage;
 
-    this.p2pRoom.broadcastApplicationMessage(message);
+    this.broadcastWordGameMessage(WordGameMessageType.UpdateSettings, updateSettingsMessage);
   }
 
   // TODO : test this
@@ -837,9 +810,11 @@ export class WordGameMulti {
       return undefined;
     }
 
-    // TODO : implement it but transfer admin rights
+    // TODO : if it is the player's turn
+    // then new turn
+    // if there is still players
+
     if (removingOurself) {
-      console.warn("attempt to remove yourself from the game");
       if (this.isLocalUserAdmin) {
         this.execTransferGameAdminship()
       }
@@ -862,12 +837,8 @@ export class WordGameMulti {
         const removePlayerMessage: RemovePlayerMessage = {
           playerId: id,
         }
-        const message = {
-          wordGameMessageType: WordGameMessageType.RemovePlayer,
-          payload: removePlayerMessage
-        } as WordGameMessage;
-    
-        this.p2pRoom.broadcastApplicationMessage(message);
+
+        this.broadcastWordGameMessage(WordGameMessageType.RemovePlayer, removePlayerMessage);
 
         // TODO : fix ids
         // TODO : fix turn
@@ -982,7 +953,7 @@ export class WordGameMulti {
       newAdminPlayerId: newGameAdminId,
     } as TransferGameAdminshipMessage;
     
-    this.broadcastGameMessage(WordGameMessageType.TransferAdminship, transferGameAdminshipMessage);
+    this.broadcastWordGameMessage(WordGameMessageType.TransferAdminship, transferGameAdminshipMessage);
   }
 
   protected doTransferGameAdminship(newAdminUserId: string) {
@@ -993,16 +964,18 @@ export class WordGameMulti {
     this.removePlayerByPeerId(this.localPlayer.user.peer.id, false);
   }
 
-  protected broadcastGameMessage(messageType: WordGameMessageType, payload: any) {
+  protected broadcastWordGameMessage(messageType: WordGameMessageType, payload: any) {
     const message = {
       wordGameMessageType: messageType,
       payload: payload
     } as WordGameMessage;
+    const appMessage: AppMessage = {
+      app: appName,
+      payload: message
+    };
 
-    this.p2pRoom.broadcastApplicationMessage(message);
+    this.p2pRoom.broadcastApplicationMessage(appMessage);
   }
-
-  protected before
 
   // #endregion
 

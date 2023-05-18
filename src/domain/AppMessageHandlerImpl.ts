@@ -30,7 +30,9 @@ export class AppMessageHandlerImpl {
     // TODO : another phase / messaging stack for this
     // pick game or something
     if (user.peer.id === this.roomManager.currentRoom.roomOwner.id) {
-      const wordGameMessage: WordGameMessage = appMessage as WordGameMessage;
+      
+      const wordGameMessage: WordGameMessage = WordGameMulti.getWordGameMessage(appMessage);
+
       if (wordGameMessage.wordGameMessageType === WordGameMessageType.StartingGame) {
         // if (wordGameMulti !== null) {
         //   console.warn("there is an error with the state of the application");
@@ -46,7 +48,7 @@ export class AppMessageHandlerImpl {
       } else {
         // logger.writeLn(`(${formatPeerName(user.name)}) : ${formatWarn("received an application level message but there is no handling for this")}`);
         console.warn("there is an error with the state of the application");
-        console.warn(appMessage);
+        console.warn(appMessage, wordGameMessage);
       }
     }
   }

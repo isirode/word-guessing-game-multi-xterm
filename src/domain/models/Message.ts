@@ -34,14 +34,19 @@ export interface WordGameMessage extends AnyMessage {
   payload: any;
 }
 
-export interface ChatMessage {
+// Info : empty interface but it will help with the typing
+export interface BaseWordGameMessage {
+
+}
+
+export interface ChatMessage extends BaseWordGameMessage {
   message: string;
 }
-export interface StartingGameMessage {
+export interface StartingGameMessage extends BaseWordGameMessage {
   playersIds: string[];
   lang: SupportedLanguages;
 }
-export interface LettersToGuessMessage {
+export interface LettersToGuessMessage extends BaseWordGameMessage {
   letters: string;
   occurences: number;
   timeToGuess: number;
@@ -50,7 +55,7 @@ export interface LettersToGuessMessage {
   // But one could want to redefine users
   playerId: string;
 }
-export interface WordGuessMessage {
+export interface WordGuessMessage extends BaseWordGameMessage {
   word: string;
   sequence: string;
   language: SupportedLanguages;
@@ -60,14 +65,14 @@ export interface WordGuessMessage {
 //   DontMatchLetters = 'dont-match-letters',
 //   WordNotFound = 'word-dont-found'
 // }
-export interface IncorrectGuessMessage {
+export interface IncorrectGuessMessage extends BaseWordGameMessage {
   // reason: IncorrectGuessReason;
   reason: GuessResult;
   word: string;
   sequence: string;
   playerId: string;
 }
-export interface CorrectGuessMessage {
+export interface CorrectGuessMessage extends BaseWordGameMessage {
   // TODO : add player id, it is currently supposing that all players are correctly synchronized (which player is currently playing)
   // Current system might reduce cheat potential though
   points: number;
@@ -76,31 +81,31 @@ export interface CorrectGuessMessage {
   sequence: string;
   playerId: string;
 }
-export interface GuessTimeoutMessage {
+export interface GuessTimeoutMessage extends BaseWordGameMessage {
   playerId: string;
 }
-export interface PlayerWonMessage {
+export interface PlayerWonMessage extends BaseWordGameMessage {
   playerId: string
   score: number
 }
-export interface UpdatePlayerNameMessage {
+export interface UpdatePlayerNameMessage extends BaseWordGameMessage {
   name: string;
 }
-export interface WordExampleMessage {
+export interface WordExampleMessage extends BaseWordGameMessage {
   word: string
   letters: string
 }
-export interface SetRoomAdminMessage {
+export interface SetRoomAdminMessage extends BaseWordGameMessage {
   roomId: string;
   playerId: string;
 }
-export interface UpdateSettingsMessage {
+export interface UpdateSettingsMessage extends BaseWordGameMessage {
   settings: IWordGameMultiSettings;
 }
-export interface RemovePlayerMessage {
+export interface RemovePlayerMessage extends BaseWordGameMessage {
   playerId: string;
 }
-export interface TransferGameAdminshipMessage {
+export interface TransferGameAdminshipMessage extends BaseWordGameMessage {
   newAdminPlayerId: string;
 }
 

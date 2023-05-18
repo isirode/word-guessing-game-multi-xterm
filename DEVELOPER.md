@@ -165,6 +165,12 @@ Your code will be posted using the same license as this project.
 ## TODO
 
 - Do a push remote Nginx conf script
+  - Then, publish the env.production.json
+
+- Fix the console warning "WebRTC: Using more than two STUN/TURN servers slows down discovery"
+
+- Find a casting system that works
+  - Typescript will let you cast anything to anything
 
 - Fix Firefox 
   - WebRTC issues
