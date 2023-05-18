@@ -1,9 +1,8 @@
-import { CmdResult, Awaitable } from "cmdy";
+import { CmdResult } from "cmdy";
 import { CmdDefinitionImpl } from "./CmdDefinitionImpl";
-import { Connection } from "../../domain/models/Connection";
-import { P2PRoom } from "../../domain/P2PRoom";
+import { Connection, P2PRoom } from "peerjs-room";
 import { Logger } from "word-guessing-game-common";
-import { RoomManager } from "../../domain/RoomManager";
+import { RoomService } from "peerjs-room";
 
 export type Format = (value: string) => string;
 
@@ -11,22 +10,19 @@ export class ConnectionCmd extends CmdDefinitionImpl {
 
   logger: Logger;
   p2pRoom: P2PRoom;
-  roomManager: RoomManager;
-  // FIXME : change the formatting system
-  // formatRoomName: Format;
+  roomManager: RoomService;
 
-  constructor(logger: Logger, p2pRoom: P2PRoom, roomManager: RoomManager/*, formatRoomName: Format*/) {
+  constructor(logger: Logger, p2pRoom: P2PRoom, roomManager: RoomService) {
     super();
 
     this.logger = logger;
     this.p2pRoom = p2pRoom;
     this.roomManager = roomManager;
-    /*this.formatRoomName = formatRoomName;*/
 
     this.name = "/connections";
     this.description = "List the connections";
 
-    // FIXME : this this, fork or 
+    // FIXME : fix this, fork for instance 
     this.exe = async (cmd) => await this.doExe(cmd);
   }
 

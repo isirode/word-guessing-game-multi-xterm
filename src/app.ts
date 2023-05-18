@@ -1,40 +1,33 @@
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 
-import { Command, OutputConfiguration } from 'commander';
+import { OutputConfiguration } from 'commander';
 
-import { DatabaseCommand, WordGameCommand, Logger, FrenchWordDatabase } from 'word-guessing-game-common';
-import { GuessResult, WordGame, WordGameOptions } from 'word-guessing-lib';
+import { Logger, SupportedLangDatabases, WordDatabaseFactory } from 'word-guessing-game-common';
+import { GuessResult, SupportedLanguages, WordGame } from 'word-guessing-lib';
 
-import { Config, buildConfig } from './config/Config';
-import { PeerJSServerClient } from './domain/adapters/secondary/api/PeerJSServerClient';
+import { buildConfig } from './config/Config';
 import { createPeer } from './peer';
 import { PromptUpTerminal } from './term/PromptUpTerminal';
-import { RoomManager } from './domain/RoomManager';
 import { WordGameMessageHandler, WordGameMulti } from './domain/WordGameMulti';
-import { IClient, IRoom } from './domain/models/Room';
+import { LocalUser, Message, P2PRoom, RenameUserMessage, TextMessage, User, IClient, Peer as DomainPeer, PeerJSServerClient, RoomService } from 'peerjs-room';
 import { ITimer } from './domain/models/Timer';
-import { IWordGameMultiSettings } from './domain/ports/secondary/IWordGameMultiSettings';
+import { IWordGameMultiSettings } from './domain/settings/IWordGameMultiSettings';
 import { WordGameMessagingEN } from './domain/adapters/secondary/locale/WordGameMessagingEN';
-import { SetRoomAdminMessage, WordGameMessage, WordGameMessageType } from './domain/models/Message';
+import { WordGameMessageType } from './domain/models/Message';
 // import Peer = require('peerjs');
-import * as PeerJS from 'peerjs';
-import { Connection } from './domain/models/Connection';
-import { AnyMessage, AppMessageHandler, LocalUser, Message, P2PRoom, RenameUserMessage, RoomMessageHandler, TextMessage, User } from './domain/P2PRoom';
-import { Peer } from './domain/models/Peer';
+// WARN : import this way because typescript cannot handle similar types but named differently
+import * as Peer from 'peerjs';
 import { Player } from './domain/models/Player';
-import { StartGameCmd, StartGameEvents } from './commands/cmdy/StartGameCmd';
-import { LeaveRoomCmd, LeaveRoomEvents } from './commands/cmdy/LeaveRoomCmd';
-import { ConnectionCmd } from './commands/cmdy/ConnectionCmd';
-import { ModifySettingsCmd } from './commands/cmdy/WordGameSettingsCmd';
 import { StateManager } from './domain/state/StateManager';
 import { VirtualInput } from './domain/state/VirtualInput';
 import { OfflineState } from './domain/state/OfflineState';
 import { InRoomState } from './domain/state/InRoomState';
-import { CreatedRoomCallback, JoinedRoomCallback } from './commands/RoomCommand';
 import { InOnlineGameState } from './domain/state/InOnlineGameState';
-import { LeaveGameEvents } from './commands/cmdy/LeaveGameCmd';
 import { AppMessageHandlerImpl } from './domain/AppMessageHandlerImpl';
+import { SettingsStoreSingleton } from './domain/settings/SettingsStoreSingleton';
+import { RoomEventData } from './commands/domain/RoomCommand';
+import { ConsoleAppender, IAppender, IConfiguration, ILayout, ILogEvent, Level, LogManager, PupaLayout } from 'log4j2-typescript';
 
 // TODO : fix the blink cursor
 
@@ -198,7 +191,7 @@ const peerJSClient = new PeerJSServerClient({
   secure: config.secure,
 });
 
-const roomManager = new RoomManager(peerJSClient);
+const roomService = new RoomService(peerJSClient);
 
 // TODO : move it an util or find an equivalent lib
 function isNullOrUndefined(object: any) {
@@ -206,14 +199,14 @@ function isNullOrUndefined(object: any) {
 }
 
 function isInRoom() {
-  return !isNullOrUndefined(roomManager.currentRoom);
+  return !isNullOrUndefined(roomService.currentRoom);
 }
 
 function getRoomPrefix(): string {
   let value = '';
   if (isInRoom()) {
-    value += '(' + roomManager.currentRoom.roomName;
-    if (localUser !== null) {
+    value += '(' + roomService.currentRoom.roomName;
+    if (!isNullOrUndefined(localUser)) {
       value += ':' + localUser.name + ':' + localUser.peer.id;
       // TODO : log conditionally ID
     }
@@ -225,7 +218,7 @@ function getRoomPrefix(): string {
 function getFormattedRoomPrefix(): string {
   let value = '';
   if (isInRoom()) {
-    value += '(' + formatRoomName(roomManager.currentRoom.roomName);
+    value += '(' + formatRoomName(roomService.currentRoom.roomName);
     if (localUser !== null) {
       value += ':' + formatPeerName(localUser.name) + ':' + formatPeerId(localUser.peer.id);
       // TODO : log conditionally ID
@@ -295,30 +288,52 @@ const logger: Logger = {
   prompt: prompt,
 }
 
-function wordGameInitializer(): WordGameMulti {
-  return new WordGameMulti(
-    roomManager.currentRoom,
-    wordGame,
-    p2pRoom,
-    new WordGameMessagingEN(),
-    wordGameSettings,
-    new WordMessageHandlerImpl(p2pRoom.localUser, p2pRoom)
-  );
+class TermAppender implements IAppender {
+
+  name: string;
+  layout: ILayout;
+
+  constructor(name: string, layout: ILayout) {
+    this.name = name;
+    this.layout = layout;
+  }
+
+  handle(logEvent: ILogEvent): void {
+    logger.writeLn(this.layout.format(logEvent));
+  }
+
 }
 
-const wordGameSettings = {
-  minOccurences: 250,
-  maxOccurences: 1000,
-  guessAsSession: true,
-  maxAttempts: 5,
-  // multi
-  winningScore: 10,
-  timePerGuess: 30,
-} as IWordGameMultiSettings;
+const logConfiguration: IConfiguration = {
+  appenders: [
+    new ConsoleAppender("console", new PupaLayout("{loggerName} {level} {time} {message}")),
+    new TermAppender("term", new PupaLayout("{message}"))
+  ],
+  loggers: [
+    {
+      name: "technical",
+      level: Level.INFO,
+      refs: [
+        {
+          ref: "console"
+        }
+      ]
+    },
+    {
+      name: "term",
+      level: Level.INFO,
+      refs: [
+        {
+          ref: "term"
+        }
+      ]
+    }
+  ]
+}
 
-var wordGame: WordGame | null;
+const logManager: LogManager = new LogManager(logConfiguration);
 
-// var wordGameMulti: WordGameMulti | null;
+// FiXME : should not be global
 var p2pRoom: P2PRoom | null;
 
 // FIXME : either remove this or solve the timer issue
@@ -369,38 +384,6 @@ function formatError(text: string) {
   return redFont + text + resetSequence;
 }
 
-const roomMessageHandler: RoomMessageHandler = {
-  // technical
-  onAttemptingConnections: function (room: IRoom): void {
-    logger.writeLn(`${getFormattedRoomPrefix()}Attempting to connect to user of the room`);
-  },
-  onConnectionEstablished: function (connection: PeerJS.DataConnection, user: User): void {
-    logger.writeLn(`${getFormattedRoomPrefix()}A connection was established with ${user.name}:${user.peer.id}`);
-  },
-  onConnectionClosed: function (connection: PeerJS.DataConnection, user: User): void {
-    logger.writeLn(`${getFormattedRoomPrefix()}A connection was closed (user: ${user.name}:${user.peer.id})`);
-  },
-  onConnectionError: function (connection: PeerJS.DataConnection, user: User, error: any): void {
-    logger.writeLn(`${getFormattedRoomPrefix()}${formatError(error.message)}`);
-  },
-  onMissingConnections: function (clients: IClient[]): void {
-    logger.writeLn(`${getFormattedRoomPrefix()}Not able to connect to all users, missing users:`);
-    clients.forEach((client: IClient) => {
-      logger.writeLn(`Client: ` + client.id);
-    });
-  },
-  onAllConnected: function (): void {
-    logger.writeLn(`${getFormattedRoomPrefix()}Successfully connected to all users of the room.`);
-  },
-  // messaging
-  onTextMessage: function (connection: PeerJS.DataConnection, user: User, text: string, textMessage: TextMessage, root: Message): void {
-    logger.writeLn(`(${formatRoomName(roomManager.currentRoom.roomName)}):${user.name}:${user.peer.id}: ${text}`);
-  },
-  onRenameUserMessage: function (connection: PeerJS.DataConnection, user: User, newName: string, formerName: string, renameUserMessage: RenameUserMessage, root: Message): void {
-    logger.writeLn(`peer ${formatPeerName(connection.peer)} has renamed to ${newName} ` + (formerName.length === 0 ? '' : `(formerlly named ${formerName})`));
-  },
-};
-
 const wordGameMessagingEN = new WordGameMessagingEN();
 
 // FIXME : move it to a adapter directory, move the interface to a port directory
@@ -419,7 +402,7 @@ class WordMessageHandlerImpl implements WordGameMessageHandler {
   }
 
   onStartingGame (settings: IWordGameMultiSettings, players: Player[], admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatStartingGame(players)}`);
+    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatStartingGame(WordGame.getFullLanguage(settings.language), players)}`);
     logger.writeLn(`${wordGameMessagingEN.formatSettings(settings)}`);
   }
   onPlayerWon (winner: Player, from: Player, admin: Player): void {
@@ -451,8 +434,12 @@ class WordMessageHandlerImpl implements WordGameMessageHandler {
     logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatSettingsWereUpdated(player.user.name)}`);
     logger.writeLn(`${wordGameMessagingEN.formatSettings(newSettings)}`);
   }
-  onPlayerRemoved(player: Player, from: Player, admin: Player) {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatPlayerWasRemoved(player.user.name, this.isSelf(player))}`);
+  onPlayerRemoved(player: Player, from: Player, admin: Player | undefined) {
+    if (admin !== undefined) {
+      logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatPlayerWasRemoved(player.user.name, this.isSelf(player))}`);
+    } else {
+      logger.writeLn(`(${formatPeerName('administration')}) : ${wordGameMessagingEN.formatPlayerWasRemoved(player.user.name, this.isSelf(player))}`);
+    }
   }
   
 }
@@ -467,25 +454,76 @@ function getRandomName(): string {
 
 var localUser: LocalUser | null;
 
-// CreatedRoomCallback
-function createdRoomCallback(room: IRoom, peer: PeerJS) {
-  throw new Error('not implemented');
-}
-
 // TODO : try catch all of this
 async function main() {
+
+  messageTerm.write('\x1B[1;3;31mWordGuessr\x1B[0m\r\n');
+
+  // TODO : mutualize this message with the multiplayer game
+  writeLn(`We are using two different databases for the dictionaries:
+  - For the french language, we are using an extraction of Grammalecte's dictionary, which is released in MPL 2.0
+  - For the english language, we are using an extraction of Wiktionary's dictionary, which is released under a dual license:
+      - GNU Free Documentation License (GFDL)
+      - Creative Commons Attribution-ShareAlike License
+  `);
+
+  const supportedLangDatabases: SupportedLangDatabases = {
+    english: {
+      language: "eng",
+      filename: config.englishWordDatabase.filename,
+    },
+    french: {
+      language: "fra",
+      filename: config.frenchWordDatabase.filename,
+    }
+  };
+
+  const databaseFactory = new WordDatabaseFactory(logger, config.wordDatabaseRootUrl, supportedLangDatabases);
+
+  const englishDatabase = await databaseFactory.getEnglishWordDatabase();
+  const frenchDatabase = await databaseFactory.getFrenchWordDatabase();
+
+  const defaultWordGameSettings = {
+    minOccurences: 250,
+    maxOccurences: 1000,
+    guessAsSession: true,
+    maxAttempts: 5,
+    language: "eng",
+    // multi
+    winningScore: 10,
+    timePerGuess: 30,
+  } as IWordGameMultiSettings;
+
+  const settingsStore = SettingsStoreSingleton.instance();
+
+  let settings = await settingsStore.find<IWordGameMultiSettings>("word-guessing", "settings");
+  if (settings === undefined) {
+    settingsStore.save("word-guessing", "settings", defaultWordGameSettings);
+    settings = settingsStore.watch("word-guessing", "settings", defaultWordGameSettings);
+  }
+  // TODO : checkout that every properties are present
+  // And add a fallback system
+  console.log("Settings:");
+  console.log(settings);
+
+  function wordGameInitializer(lang: string): WordGameMulti {
+    if (lang !== undefined) {
+      let finalLang: SupportedLanguages = lang as SupportedLanguages;
+      wordGame.overrideLanguage = finalLang;
+    }
+    return new WordGameMulti(
+      roomService.currentRoom,
+      p2pRoom,
+      wordGame,
+      settings,
+      new WordMessageHandlerImpl(p2pRoom.localUser, p2pRoom)
+    );
+  }
 
   const rooms = peerJSClient.getRooms();
   console.log(rooms);
 
-  const wordDatabaseRootURL: string = 'https://dev.onesime-deleham.ovh/';
-  const wordDatabaseFilename: string = 'sample.db';
-  const frenchWordDatabase = new FrenchWordDatabase(wordDatabaseRootURL, wordDatabaseFilename, logger);
-  // TODO : add a log here for Dexie
-  await frenchWordDatabase.open();
-  await frenchWordDatabase.initSQL();
-
-  wordGame = new WordGame(frenchWordDatabase, wordGameSettings);
+  const wordGame = new WordGame(frenchDatabase, englishDatabase, settings);
 
   const vitualInput = new VirtualInput(promptTerm);
   const stateManager = new StateManager(promptTerm, messageTerm, vitualInput, logger, configuration);
@@ -498,29 +536,31 @@ async function main() {
     return peer;
   }
 
-  stateManager.stateRegister.register('offline', new OfflineState(
+  const offlineState = new OfflineState(
     vitualInput,
     logger,
-    frenchWordDatabase,
+    frenchDatabase,
+    englishDatabase,
     wordGame,
-    roomManager,
+    roomService,
     (async () => await peerProvider()),
-    joinedRoomCallback, createdRoomCallback, configuration
-    )
+    configuration
   );
+  stateManager.stateRegister.register('offline', offlineState);
   stateManager.stateRegister.changeTo('offline');
 
-  // JoinedRoomCallback
-  function joinedRoomCallback(room: IRoom, peer: PeerJS) {
-    console.log("joinedRoomCallback");
+  function onRoomCreatedOrJoined(roomEventData: RoomEventData) {
+    console.log("createdRoom");
+
+    const {room, peer} = roomEventData;
 
     if (p2pRoom !== null) {
       console.warn("has just joined a room but p2pRoom is not null");
     }
-    if (isNullOrUndefined(roomManager.currentRoom)) {
+    if (isNullOrUndefined(roomService.currentRoom)) {
       console.warn("currentRoom should not be null at this point");
     }
-    if (roomManager.currentRoom !== room) {
+    if (roomService.currentRoom !== room) {
       console.warn("currentRoom should not be different than the room of the callback");
     }
     if (isNullOrUndefined(wordGame)) {
@@ -528,7 +568,7 @@ async function main() {
     }
   
     localUser = {
-      peer: new Peer(peer),
+      peer: new DomainPeer(peer),
       name: getRandomName(),
     };
 
@@ -536,20 +576,76 @@ async function main() {
       console.log("onStartedGame : setting onlinegame state");
 
       // We are in game now
-      const leaveGameEvents: LeaveGameEvents = {
-        onLeaveGame() {
-          stateManager.stateRegister.currentState = getInRoomState();
-        }
-      }
-      let inOnlineGameState = new InOnlineGameState(logger, vitualInput, roomManager, p2pRoom, wordGameMulti, leaveGameEvents);
+      let inOnlineGameState = new InOnlineGameState(logger, vitualInput, roomService, p2pRoom, wordGameMulti);
+
+      inOnlineGameState.gameEvents.on('leavedGame', () => {
+        stateManager.stateRegister.currentState = getInRoomState();
+      });
+
       stateManager.stateRegister.currentState = inOnlineGameState;
     }
 
     logger.writeLn(`You joined the room as ${localUser.name} (${localUser.peer.id})`);
 
-    const appMessageHandler = new AppMessageHandlerImpl(logger, roomManager, wordGameInitializer, onStartedGame);
+    const appMessageHandler = new AppMessageHandlerImpl(logger, roomService, wordGameInitializer, onStartedGame);
 
-    p2pRoom = new P2PRoom(localUser, room, roomMessageHandler, appMessageHandler, animalNames);
+    const roomMessageHandler = {
+      // technical
+      onConnectionEstablished: function (connection: Peer.DataConnection, user: User): void {
+        logger.writeLn(`${getFormattedRoomPrefix()}A connection was established with ${user.name}:${user.peer.id}`);
+      },
+      onConnectionClosed: function (connection: Peer.DataConnection, user: User): void {
+        logger.writeLn(`${getFormattedRoomPrefix()}A connection was closed (user: ${user.name}:${user.peer.id})`);
+      },
+      onConnectionError: function (connection: Peer.DataConnection, user: User, error: Error): void {
+        logger.writeLn(`${getFormattedRoomPrefix()}${formatError(error.message)}`);
+      },
+      onMissingConnections: function (missingConnections: IClient[]): void {
+        logger.writeLn(`${getFormattedRoomPrefix()}Not able to connect to all users, missing users:`);
+        missingConnections.forEach((client: IClient) => {
+          logger.writeLn(`Client: ` + client.id);
+        });
+      },
+      onAllConnected: function (): void {
+        logger.writeLn(`${getFormattedRoomPrefix()}Successfully connected to all users of the room.`);
+      },
+      // messaging
+      onTextMessage: function (connection: Peer.DataConnection, user: User, text: string, textMessage: TextMessage, root: Message): void {
+        logger.writeLn(`(${formatRoomName(roomService.currentRoom.roomName)}):${user.name}:${user.peer.id}: ${text}`);
+      },
+      onRenameUserMessage: function (connection: Peer.DataConnection, user: User, newName: string, formerName: string, renameUserMessage: RenameUserMessage, root: Message): void {
+        logger.writeLn(`peer ${formatPeerName(connection.peer)} has renamed to ${newName} ` + (formerName.length === 0 ? '' : `(formerlly named ${formerName})`));
+      },
+    };
+
+    p2pRoom = new P2PRoom(localUser, room, animalNames);
+    // technical
+    p2pRoom.events.on('connectionEstablished', ({connection, user}) => {
+      roomMessageHandler.onConnectionEstablished(connection, user);
+    });
+    p2pRoom.events.on('connectionClosed', ({connection, user}) => {
+      roomMessageHandler.onConnectionClosed(connection, user);
+    });
+    p2pRoom.events.on('connectionError', ({connection, user, error}) => {
+      roomMessageHandler.onConnectionError(connection, user, error);
+    });
+    p2pRoom.events.on('missingConnections', ({missingConnections}) => {
+      roomMessageHandler.onMissingConnections(missingConnections);
+    });
+    p2pRoom.events.on('allConnected', ({clients}) => {
+      roomMessageHandler.onAllConnected();
+    });
+    // messaging
+    p2pRoom.events.on('textMessage', ({connection, user, text, textMessage, root}) => {
+      roomMessageHandler.onTextMessage(connection, user, text, textMessage, root);
+    });
+    p2pRoom.events.on('renameUserMessage', ({connection, user, newName, formerName, renameUserMessage, root}) => {
+      roomMessageHandler.onRenameUserMessage(connection, user, newName, formerName, renameUserMessage, root);
+    });
+    // app
+    p2pRoom.events.on('appMessage', ({user, appMessage, root}) => {
+      appMessageHandler.onAppMessage(user, appMessage, root)
+    });
   
     if (localUser.peer.id === room.roomOwner.id) {
       logger.writeLn('You are admin of the room');
@@ -558,22 +654,22 @@ async function main() {
     }
     console.log(peer.connections);
 
-    let leaveRoomEvents: LeaveRoomEvents = {
-      onLeaveRoom() {
+    function getInRoomState(): InRoomState {
+      const inRoomState = new InRoomState(logger, vitualInput, roomService, p2pRoom, wordGameInitializer);
+      inRoomState.roomEvents.on('leavedRoom', () => {
+        p2pRoom = undefined;
+        localUser = undefined;
         stateManager.stateRegister.changeTo('offline');
-      }
-    };
-
-    function getInRoomState() {
-      return new InRoomState(logger, vitualInput, roomManager, p2pRoom, peer, startGameEvents, wordGameInitializer, leaveRoomEvents);
-    }
-
-    let startGameEvents: StartGameEvents = {
-      onStartedGame: onStartedGame
+      });
+      inRoomState.gameEvents.on('startedGame', onStartedGame);
+      return inRoomState;
     }
   
     stateManager.stateRegister.currentState = getInRoomState();
-  }
+  };
+
+  offlineState.roomEvents.on('joinedRoom', onRoomCreatedOrJoined);
+  offlineState.roomEvents.on('createdRoom', onRoomCreatedOrJoined);
 
   // TODO : test this
   promptTerm.onData((char) => {
@@ -582,9 +678,11 @@ async function main() {
 
   });
 
+  logger.prompt();
+
   // if (targetElement != null) {
   // TODO : insert ASCII art here
-  messageTerm.write('\x1B[1;3;31mWordGuessr\x1B[0m ');
+  // messageTerm.write('\x1B[1;3;31mWordGuessr\x1B[0m ');
 
   // FIXME : illegal access is logged from here
   // In Firefox, A mutation operation was attempted on a database that did not allow mutations

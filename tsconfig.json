@@ -1,11 +1,5 @@
-{/*
+{
   "compilerOptions": {
-    "esModuleInterop": false,
-    "target": "es2021",
-    "baseUrl": "./src",
-    "paths": {
-      "~/*": ["./src"],
-    }
+    "experimentalDecorators": true,
   }
-  */
 }

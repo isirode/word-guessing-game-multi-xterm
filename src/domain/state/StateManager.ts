@@ -1,13 +1,7 @@
-import { WordGame } from "word-guessing-lib";
-import { P2PRoom } from "../P2PRoom";
-import { RoomManager } from "../RoomManager";
-import { WordGameMulti } from "../WordGameMulti";
 import { Terminal } from "xterm";
 import { Logger } from "word-guessing-game-common";
 import { State } from "./State";
 import { IVirtualInput } from "./IVirtualInput";
-import { VirtualInput } from "./VirtualInput";
-import { OfflineState } from "./OfflineState";
 import { OutputConfiguration } from "commander";
 
 type StateOrStateProvider =  State | (() => State);

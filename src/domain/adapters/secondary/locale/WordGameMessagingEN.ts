@@ -1,23 +1,15 @@
 import { IWordGameMessaging } from "../../../../domain/ports/secondary/locale/IWordGameMessaging";
 import { WordGameMessageType } from '../../../../domain/models/Message';
 import { Player } from "../../../models/Player";
-import { IWordGameMultiSettings } from "../../../ports/secondary/IWordGameMultiSettings";
-
-/*
-function getPlayerRadical(player: string, isSelf: boolean): string {
-  if (isSelf) {
-    return 
-  }
-}
-*/
+import { IWordGameMultiSettings } from "../../../settings/IWordGameMultiSettings";
 
 export class WordGameMessagingEN implements IWordGameMessaging {
   formatAdminActionAttempted (playerName: string, roomMessageType: WordGameMessageType): string {
     return `player ${playerName} has attempted to manage the game but is not an admin of the room (${roomMessageType})`
   }
 
-  formatStartingGame (players: Player[]): string {
-    return `Starting game (players: ${players.map(x => x.user.name).join(',')})`;
+  formatStartingGame (language: string, players: Player[]): string {
+    return `Starting game (language: ${language}, players: ${players.map(x => x.user.name).join(',')})`;
   }
 
   formatSettings (settings: IWordGameMultiSettings): string {

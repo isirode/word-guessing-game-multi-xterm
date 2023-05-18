@@ -1,6 +1,6 @@
-import { GuessResult } from "word-guessing-lib";
-import { AnyMessage } from "../P2PRoom";
-import { IWordGameMultiSettings } from "../ports/secondary/IWordGameMultiSettings";
+import { GuessResult, SupportedLanguages } from "word-guessing-lib";
+import { AnyMessage } from "peerjs-room";
+import { IWordGameMultiSettings } from "../settings/IWordGameMultiSettings";
 
 export enum WordGameMessageType {
   StartingGame = 'starting-game',
@@ -39,6 +39,7 @@ export interface ChatMessage {
 }
 export interface StartingGameMessage {
   playersIds: string[];
+  lang: SupportedLanguages;
 }
 export interface LettersToGuessMessage {
   letters: string;
@@ -52,6 +53,7 @@ export interface LettersToGuessMessage {
 export interface WordGuessMessage {
   word: string;
   sequence: string;
+  language: SupportedLanguages;
   playerId: string;
 }
 // export enum IncorrectGuessReason {

@@ -1,25 +1,39 @@
 import { Logger } from "word-guessing-game-common";
 import { ConnectionCmd } from "../../commands/cmdy/ConnectionCmd";
-import { LeaveRoomCmd, LeaveRoomEvents } from "../../commands/cmdy/LeaveRoomCmd";
-import { StartGameCmd, StartGameEvents, WordGameMultiInitializer } from "../../commands/cmdy/StartGameCmd";
-import { P2PRoom } from "../P2PRoom";
-import { RoomManager } from "../RoomManager";
+import { LeaveRoomCmd } from "../../commands/cmdy/LeaveRoomCmd";
+import { StartGameCmd } from "../../commands/cmdy/StartGameCmd";
+import { P2PRoom, RoomService } from "peerjs-room";
 import { State } from "./State";
-import Peer = require("peerjs");
 import { CmdDefinition, parseCmd } from "cmdy";
 import { IVirtualInput } from "./IVirtualInput";
 import { ENTER, ESC } from "../Keys";
+import { Events, RoomCommand } from "../../commands/domain/RoomCommand";
+import Emittery from "emittery";
+import { WordGameMultiInitializer, Events as GameEvents, GameCommand } from "../../commands/domain/GameCommand";
+import { RoomAdminCmd } from "../../commands/cmdy/RoomAdminCmd";
 
 export class InRoomState implements State {
   
   logger: Logger;
   input: IVirtualInput;
-  roomManager: RoomManager;
+  roomManager: RoomService;
   p2pRoom: P2PRoom;
+
   root: CmdDefinition;
+  
+  roomCommand: RoomCommand;
+  gameCmd: StartGameCmd;
+
+  get roomEvents(): Emittery<Events> {
+    return this.roomCommand.events;
+  }
+
+  get gameEvents(): Emittery<GameEvents> {
+    return this.gameCmd.gameEvents;
+  }
 
   // FIXME : replace peerjs peer by ours
-  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomManager, p2pRoom: P2PRoom, peer: Peer, startGameEvents: StartGameEvents, wordGameMultiInitializer: WordGameMultiInitializer, leaveRoomEvents: LeaveRoomEvents) {
+  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomService, p2pRoom: P2PRoom, wordGameMultiInitializer: WordGameMultiInitializer) {
     // need to be able to
     // leave
     // start game
@@ -30,12 +44,14 @@ export class InRoomState implements State {
     this.roomManager = roomManager;
     this.p2pRoom = p2pRoom;
 
-    if (startGameEvents === null || startGameEvents === undefined) {
-      console.warn("startGameEvents is null or undefined");
-    }
+    // FIXME : should not be able to create room while in room right ?
+    // Or maybe you should ?
+    this.roomCommand = new RoomCommand(logger, roomManager, undefined);
+    const leave = new LeaveRoomCmd(this.roomCommand, p2pRoom, roomManager);
+    const admin = new RoomAdminCmd(p2pRoom);
 
-    const start = new StartGameCmd(logger, startGameEvents, wordGameMultiInitializer);
-    const leave = new LeaveRoomCmd(p2pRoom, roomManager, peer.id, leaveRoomEvents);
+    this.gameCmd = new StartGameCmd(logger, wordGameMultiInitializer);
+
     const connectionCmd = new ConnectionCmd(logger, p2pRoom, roomManager);
     // FIXME : could be null
     // const settings = new ModifySettingsCmd(logger, wordGameMulti);
@@ -55,9 +71,10 @@ export class InRoomState implements State {
       name: "",
       description: "",
       cmds: [
-          start,
+          this.gameCmd,
           leave,
           connectionCmd,
+          admin
       ],
       flags: [
           // version
@@ -124,10 +141,6 @@ export class InRoomState implements State {
 
       this.logger.prompt();
     }
-  }
-  
-  handleText(e: string): void {
-
   }
 
   bind() {

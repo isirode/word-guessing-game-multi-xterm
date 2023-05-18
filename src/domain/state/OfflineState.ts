@@ -1,11 +1,12 @@
 import { Command, OutputConfiguration } from "commander";
 import { State } from "./State";
 import { IVirtualInput } from "./IVirtualInput";
-import { DatabaseCommand, FrenchWordDatabase, Logger, WordGameCommand } from "word-guessing-game-common";
-import { CreatedRoomCallback, JoinedRoomCallback, PeerProvider, RoomCommand } from "../../commands/RoomCommand";
-import { WordGame } from "word-guessing-lib";
-import { RoomManager } from "../RoomManager";
-import Peer = require("peerjs");
+import { DatabaseCommander, Logger, WordGameCommander } from "word-guessing-game-common";
+import { RoomCommander } from "../../commands/commander/RoomCommander";
+import { IWordDatabase, WordGame } from "word-guessing-lib";
+import { RoomService } from "peerjs-room";
+import { Events, PeerProvider } from "../../commands/domain/RoomCommand";
+import Emittery from 'emittery';
 
 // TODO : arrow navigation in the commands
 
@@ -23,7 +24,13 @@ export class OfflineState implements State {
   program: Command;
   logger: Logger;
 
-  constructor(input: IVirtualInput, logger: Logger, frenchWordDatabase: FrenchWordDatabase, wordGame: WordGame, roomManager: RoomManager, peerProvider: PeerProvider, joinedRoomCallback: JoinedRoomCallback, createdRoomCallback: CreatedRoomCallback, configuration: OutputConfiguration) {
+  roomCommander: RoomCommander;
+
+  get roomEvents(): Emittery<Events> {
+    return this.roomCommander.events;
+  }
+
+  constructor(input: IVirtualInput, logger: Logger, frenchDatabase: IWordDatabase, englishDatabase: IWordDatabase, wordGame: WordGame, roomService: RoomService, peerProvider: PeerProvider, configuration: OutputConfiguration) {
     this.input = input;
     this.logger = logger;
 
@@ -38,20 +45,20 @@ export class OfflineState implements State {
       .description('CLI to execute commands')
       .version('0.0.1');
 
-    const wordGameCommand = new WordGameCommand(wordGame, configureCommand, logger);
+    const wordGameCommand = new WordGameCommander(wordGame, configureCommand, logger, frenchDatabase, englishDatabase);
     wordGameCommand.setup();
     configureCommand(wordGameCommand);
     this.program.addCommand(wordGameCommand);
 
-    const databaseCommand = new DatabaseCommand(frenchWordDatabase, configureCommand, logger);
+    const databaseCommand = new DatabaseCommander(frenchDatabase, englishDatabase, configureCommand, logger);
     databaseCommand.setup();
     configureCommand(databaseCommand);
     this.program.addCommand(databaseCommand);
 
-    const roomCommand = new RoomCommand(roomManager, peerProvider, configureCommand, logger, joinedRoomCallback, createdRoomCallback);
-    roomCommand.setup();
-    configureCommand(roomCommand);
-    this.program.addCommand(roomCommand);
+    this.roomCommander = new RoomCommander(roomService, peerProvider, configureCommand, logger);
+    this.roomCommander.setup();
+    configureCommand(this.roomCommander);
+    this.program.addCommand(this.roomCommander);
 
     configureCommand(this.program);
 

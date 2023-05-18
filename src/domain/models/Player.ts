@@ -1,4 +1,4 @@
-import { User, sanitizeUser } from "../P2PRoom";
+import { User, sanitizeUser } from "peerjs-room";
 
 // TODO : class with a getter 'id'
 export interface Player {

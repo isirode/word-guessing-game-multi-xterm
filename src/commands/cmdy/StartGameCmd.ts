@@ -1,7 +1,8 @@
-import { CmdResult, Awaitable, ValueFlag, CmdDefinition } from "cmdy";
+import { CmdResult, ValueFlag } from "cmdy";
 import { CmdDefinitionImpl } from "./CmdDefinitionImpl";
-import { WordGameMulti } from "../../domain/WordGameMulti";
 import { Logger } from "word-guessing-game-common";
+import { Events, GameCommand, WordGameMultiInitializer } from "../domain/GameCommand";
+import Emittery from "emittery";
 
 // FIXME : would want to have the command retrieve the data dynamically ?
 
@@ -13,27 +14,33 @@ const gameType: ValueFlag = {
   required: false,
 }
 
-export interface StartGameEvents {
-  onStartedGame(game: WordGameMulti): void;
+// FIXME : not common to every games
+const lang: ValueFlag = {
+  name: "lang",
+  description: "Precise the language for the game",
+  shorthand: "l",
+  types: ["string"],
+  required: false,
 }
-
-export type WordGameMultiInitializer = () => WordGameMulti;
 
 // TODO : split the parsing and the logic
 export class StartGameCmd extends CmdDefinitionImpl {
 
   logger: Logger;
-  wordGameMultiInitializer: WordGameMultiInitializer;
-  startGameEvents: StartGameEvents;
 
-  result: WordGameMulti;
+  gameCommand: GameCommand;
 
-  constructor(logger: Logger, startGameEvents: StartGameEvents, wordGameMultiInitializer: WordGameMultiInitializer) {
+  get gameEvents(): Emittery<Events> {
+    return this.gameCommand.events;
+  }
+
+  constructor(logger: Logger, wordGameMultiInitializer: WordGameMultiInitializer) {
     super();
 
     this.logger = logger;
-    this.wordGameMultiInitializer = wordGameMultiInitializer;
-    this.startGameEvents = startGameEvents;
+
+    // FIXME : should it be passed as a parameter ?
+    this.gameCommand = new GameCommand(logger, wordGameMultiInitializer);
 
     this.name = "/play";
     this.alias = [
@@ -41,7 +48,7 @@ export class StartGameCmd extends CmdDefinitionImpl {
     ];
     this.description = "Start a game";
     this.flags = [
-      gameType
+      gameType, lang
     ];
     this.allowUnknownArgs = false;
 
@@ -54,21 +61,9 @@ export class StartGameCmd extends CmdDefinitionImpl {
     console.log(cmd.valueFlags);
 
     const game: string = cmd.valueFlags['game'];
+    const lang: string = cmd.valueFlags['lang'];
 
-    if (game === 'word' || game === 'word-guessr' || game === undefined) {
-      console.log('yeah');
-
-      this.result = this.wordGameMultiInitializer();
-
-      // TODO : should be divided in two phases
-      this.result.startGame();
-
-      this.startGameEvents.onStartedGame(this.result);
-
-    } else {
-      // TODO : format as a warn
-      this.logger.writeLn(`The game '${game}' is not recognized`);
-    }
+    this.gameCommand.startGame(game, lang);
   }
 }
 

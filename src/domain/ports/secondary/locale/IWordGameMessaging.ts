@@ -1,6 +1,6 @@
 import { WordGameMessageType } from '../../../../../src/domain/models/Message'
 import { Player } from '../../../models/Player'
-import { IWordGameMultiSettings } from '../IWordGameMultiSettings'
+import { IWordGameMultiSettings } from '../../../settings/IWordGameMultiSettings'
 // FIXME : this the recursive path system
 // Since the project is using parcel, it might be difficult
 // '/' path is C:\
@@ -8,7 +8,7 @@ import { IWordGameMultiSettings } from '../IWordGameMultiSettings'
 
 export interface IWordGameMessaging {
   formatAdminActionAttempted (playerName: string, roomMessageType: WordGameMessageType): string;
-  formatStartingGame (players: Player[]): string;
+  formatStartingGame (language: string, players: Player[]): string;
 
   formatPlayerHasWon(player: string, score: number, isSelf: boolean): string;
   formatWrongPlayerHasWon(currentPlayerPlaying: string, winningPlayer: string): string;

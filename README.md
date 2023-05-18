@@ -12,6 +12,26 @@ The database is originally provided by [Grammalecte](https://grammalecte.net/) (
 
 ![Example](./Documentation/Resources/Example.PNG)
 
+## Features
+
+- Get a sequence of letter in:
+  - French (using Grammecte)
+  - Wiktionary (using Wiktionary)
+- Configure
+  - Min number of occurences of the sequence
+  - Max number of occurences of the sequence
+  - Max number of attempts to guess a word containing the sequence
+
+- Play in multiplayer
+  - Create a room to play in
+  - Publish to a server for other players to join
+  - It is played using WebRTC (P2P), you do not communicate with the server for this
+  - The server is only used to hold the definition of the rooms and helping the players connect themselves
+- Chat in the room
+- The gamemplay is different when playing in multiplayer: 
+  - you have a fix amount of time to guess a word containing the transmitted sequence
+  - you win after a certain amount of points earned (based on the length of the word, 1 letter = 1 points)
+
 ## Running the project
 
 You can use Parcel + Yarn : 'yarn start'
@@ -26,7 +46,10 @@ Nothing here yet.
 
 ## Know issues
 
-Nothing here yet.
+- The peerjs-server-room fork is not published yet
+  - So you cannot use the project for now
+- Some functionalities are not present yet
+- It is a work in progress
 
 ## Partipating
 

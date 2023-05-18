@@ -1,7 +1,6 @@
 import { Logger } from "word-guessing-game-common";
 import { ENTER } from "../Keys";
-import { P2PRoom } from "../P2PRoom";
-import { RoomManager } from "../RoomManager";
+import { P2PRoom, RoomService } from "peerjs-room";
 import { WordGameMulti } from "../WordGameMulti";
 import { IVirtualInput } from "./IVirtualInput";
 import { State } from "./State";
@@ -9,7 +8,9 @@ import { CmdDefinition, parseCmd } from "cmdy";
 import { ModifySettingsCmd } from "../../commands/cmdy/WordGameSettingsCmd";
 import { PlayerCmd } from "../../commands/cmdy/PlayerCmd";
 import { ConnectionCmd } from "../../commands/cmdy/ConnectionCmd";
-import { LeaveGameCmd, LeaveGameEvents } from "../../commands/cmdy/LeaveGameCmd";
+import { LeaveGameCmd } from "../../commands/cmdy/LeaveGameCmd";
+import Emittery from "emittery";
+import { Events } from "../../commands/domain/GameCommand";
 
 export class InOnlineGameState implements State {
 
@@ -19,7 +20,13 @@ export class InOnlineGameState implements State {
 
   root: CmdDefinition;
 
-  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomManager, p2pRoom: P2PRoom, wordGameMulti: WordGameMulti, leaveGameEvents: LeaveGameEvents) {
+  leaveGameCmd: LeaveGameCmd;
+
+  get gameEvents(): Emittery<Events> {
+    return this.leaveGameCmd.gameEvents;
+  }
+
+  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomService, p2pRoom: P2PRoom, wordGameMulti: WordGameMulti) {
     this.logger = logger;
     this.input = input;
     this.wordGameMulti = wordGameMulti;
@@ -28,7 +35,7 @@ export class InOnlineGameState implements State {
     const players = new PlayerCmd(logger, wordGameMulti);
     const settings = new ModifySettingsCmd(logger, wordGameMulti);
     const connectionCmd = new ConnectionCmd(logger, p2pRoom, roomManager);
-    const leaveGameCmd = new LeaveGameCmd(wordGameMulti, leaveGameEvents);
+    this.leaveGameCmd = new LeaveGameCmd(logger, wordGameMulti);
 
     this.root = {
       name: "",
@@ -37,7 +44,7 @@ export class InOnlineGameState implements State {
         players,
         settings,
         connectionCmd,
-        leaveGameCmd,
+        this.leaveGameCmd,
       ],
       flags: [
           // version
@@ -53,6 +60,7 @@ export class InOnlineGameState implements State {
       return;
     }
     try {
+      console.log("handleData");
       const text = input.value;
       // FIXME : this is in common with InRoomState
       if (text.startsWith('/')) {
@@ -100,6 +108,7 @@ export class InOnlineGameState implements State {
   }
 
   bind() {
+    console.log("binding");
     this.input.onNewCharacter = (e, v) => this.handleData(e, v);
   }
 }

@@ -1,7 +1,7 @@
 import { Logger } from "word-guessing-game-common";
 import { WordGameMulti } from "../../domain/WordGameMulti";
 import { CmdDefinitionImpl } from "./CmdDefinitionImpl";
-import { Awaitable, CmdResult, ValueFlag } from "cmdy";
+import { CmdResult, ValueFlag } from "cmdy";
 
 class WordGameSettingsHelpCmd extends CmdDefinitionImpl {
 

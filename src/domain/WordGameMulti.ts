@@ -1,18 +1,15 @@
-import { IRoom } from './models/Room';
+import { IRoom } from 'peerjs-room';
 import {
-  WordGameMessageType, ChatMessage, StartingGameMessage,
+  WordGameMessageType, StartingGameMessage,
   LettersToGuessMessage, WordGuessMessage, IncorrectGuessMessage, CorrectGuessMessage, GuessTimeoutMessage,
-  PlayerWonMessage, UpdatePlayerNameMessage, isRoomMessageTypeProtected, WordExampleMessage, UpdateSettingsMessage, WordGameMessage, RemovePlayerMessage, TransferGameAdminshipMessage
+  PlayerWonMessage, isRoomMessageTypeProtected, WordExampleMessage, UpdateSettingsMessage, WordGameMessage, RemovePlayerMessage, TransferGameAdminshipMessage
 } from './models/Message';
-import { Connection } from './models/Connection';
-import { ITimer } from './models/Timer';
-import { IPeer } from './models/Peer';
-import { FrenchWordDatabase } from 'word-guessing-game-common';
-import { IWordGameMessaging } from './ports/secondary/locale/IWordGameMessaging';
-import { IWordGameMultiSettings } from './ports/secondary/IWordGameMultiSettings';
-import { WordGame, GuessResult } from 'word-guessing-lib';
-import { AnyMessage, AppMessageHandler, Message, P2PRoom, User, getApplicationMessage, sanitizeUser } from './P2PRoom';
-import { Player, sanitizePlayer } from './models/Player';
+import { IWordGameMultiSettings } from './settings/IWordGameMultiSettings';
+import { WordGame, GuessResult, SupportedLanguages } from 'word-guessing-lib';
+// import { AnyMessage, AppMessageHandler, Message, P2PRoom, User } from './P2PRoom';
+import { AnyMessage, Events as RoomEvents, Message, P2PRoom, User } from 'peerjs-room';
+import { Player } from './models/Player';
+import Emittery from 'emittery';
 
 export interface WordGameMessageHandler {
   onStartingGame(settings: IWordGameMultiSettings, players: Player[], admin: Player): void;
@@ -28,10 +25,15 @@ export interface WordGameMessageHandler {
   onWordExample(example: string, sequence: string, admin: Player): void;
   onSettingsUpdated(newSettings: IWordGameMultiSettings, formerSettings: IWordGameMultiSettings, player: Player, admin: Player): void;
 
-  onPlayerRemoved(player: Player, from: Player, admin: Player): void;
+  onPlayerRemoved(player: Player, from: Player, admin: Player | undefined): void;
 }
 
 export type OnMessagePushed = (message: Message) => void;
+
+export interface Events {
+  beforeNewGuess: undefined;
+}
+export type EventsKeys = keyof Events;
 
 // TODO : use an interface
 // import TimerType from  '../components/Timer.vue'
@@ -68,8 +70,6 @@ export class WordGameMulti {
 
   wordGame: WordGame;
 
-  public localeMessaging: IWordGameMessaging;
-
   // TODO : move to a settings model
   settings: IWordGameMultiSettings;
 
@@ -90,6 +90,8 @@ export class WordGameMulti {
 
   wordGameMessageHandler: WordGameMessageHandler;
 
+  events: Emittery<Events>;
+
   // #endregion
 
   // #region "Computed properties"
@@ -103,7 +105,7 @@ export class WordGameMulti {
 
   get currentSequence(): string {
     if (this.isLocalUserAdmin) {
-      return this.wordGame.currentSequence;
+      return this.wordGame.currentSequence.stringSequence;
     }
     return this._currentSequence;
   }
@@ -140,32 +142,33 @@ export class WordGameMulti {
     return this.adminId === this.localPlayer.user.peer.id;
   }
 
+  get isPlaying(): boolean {
+    return this.gameStarted;
+  }
+
   // #endregion
 
-  constructor (room: IRoom, wordGame: WordGame, p2pRoom: P2PRoom, localeMessaging: IWordGameMessaging, settings: IWordGameMultiSettings, wordGameMessageHandler: WordGameMessageHandler) {
+  constructor (room: IRoom, p2pRoom: P2PRoom, wordGame: WordGame, settings: IWordGameMultiSettings, wordGameMessageHandler: WordGameMessageHandler) {
     this.room = room;
-    this.wordGame = wordGame;
     this.p2pRoom = p2pRoom;
+    this.wordGame = wordGame;
     //this.timer = timer
-    this.localeMessaging = localeMessaging;
     this.settings = settings;
     this.wordGameMessageHandler = wordGameMessageHandler;
 
     // TODO : init player
 
     const self = this;
-    const appMessageHandler: AppMessageHandler = {
-      onAppMessage: function (user: User, message: AnyMessage, root: Message): void {
-        self.handleAppMessage(user, message, root);
-      }
-    }
+    p2pRoom.events.on('appMessage', ({user, appMessage, root}) => {
+      self.handleAppMessage(user, appMessage, root);
+    });
 
     this.localPlayer = {
       user: p2pRoom.localUser,
       score: 0,
     } as Player;
 
-    this.p2pRoom.appMessageHandler = appMessageHandler;
+    this.events = new Emittery();
 
     // this.onMessagePushedCallback = onMessagePushedCallback;
   }
@@ -202,6 +205,7 @@ export class WordGameMulti {
 
     const startingGameMessage: StartingGameMessage = {
       playersIds: playersIds,
+      lang: this.settings.language as SupportedLanguages,
     }
     const message: WordGameMessage = {
       wordGameMessageType: WordGameMessageType.StartingGame,
@@ -276,8 +280,11 @@ export class WordGameMulti {
   public verifyGuess (wordGuessMessage: WordGuessMessage) {
     console.log('verifying ' + wordGuessMessage.word);
 
-    if (wordGuessMessage.sequence !== this.wordGame.currentSequence) {
+    if (wordGuessMessage.sequence !== this.wordGame.currentSequence.stringSequence) {
       console.warn(`Local sequence (${this.currentSequence}) and message sequence (${wordGuessMessage.sequence}) are different`);
+    }
+    if (wordGuessMessage.language !== this.wordGame.currentSequence.language) {
+      console.warn(`remote player is guessing for the language ${wordGuessMessage.language} but sequence's language is ${this.wordGame.currentSequence.language}, configured language is ${this.settings.language}`);
     }
 
     const result = this.wordGame.verifyGuess(wordGuessMessage.word);
@@ -297,7 +304,7 @@ export class WordGameMulti {
 
         player.score += score;
 
-        const sanitizedPlayer = sanitizePlayer(player);
+        // const sanitizedPlayer = sanitizePlayer(player);
 
         if (player === undefined) {
           console.warn('player ' + this.playerIdCurrentlyPlaying + ' is undefined, cannot add score to him')
@@ -362,7 +369,7 @@ export class WordGameMulti {
         console.log('This word do not exist in the database.');
         const incorrectGuessMessage1: IncorrectGuessMessage = {
           word: wordGuessMessage.word,
-          sequence: this.wordGame.currentSequence,
+          sequence: this.wordGame.currentSequence.stringSequence,
           reason: GuessResult.WORD_DO_NOT_EXIST,
           playerId: wordGuessMessage.playerId,
         }
@@ -386,7 +393,7 @@ export class WordGameMulti {
         console.log(`This word do not match the current sequence ('${this.wordGame.currentSequence}').`);
         const incorrectGuessMessage2: IncorrectGuessMessage = {
           word: wordGuessMessage.word,
-          sequence: this.wordGame.currentSequence,
+          sequence: this.wordGame.currentSequence.stringSequence,
           reason: GuessResult.WORD_DO_NOT_MATCH_SEQUENCE,
           playerId: wordGuessMessage.playerId,
         }
@@ -412,9 +419,11 @@ export class WordGameMulti {
     // TODO : test œuf
   }
 
-  public newGuess (startingId?: number) {
+  public async newGuess (startingId?: number) {
     // TODO : do not use clearTimeout but something else, so that this notion does not appear in this class
     this.clearTimer();
+
+    await this.events.emit('beforeNewGuess');
 
     if (startingId !== undefined) {
       this.currentId = startingId
@@ -428,7 +437,7 @@ export class WordGameMulti {
     const player = this.players[this.currentId]
 
     this.wordGame.getNewSequence();
-    const occurences = this.wordGame.wordDatabase.getSequenceOccurences(this.wordGame.currentSequence);
+    const occurences = this.wordGame.currentDatabase.getSequenceOccurences(this.wordGame.currentSequence.stringSequence);
     
     const lettersToGuessMessage: LettersToGuessMessage = {
       letters: this.currentSequence,
@@ -464,6 +473,8 @@ export class WordGameMulti {
 
   // FIXME : should the responsibility to attempt a guess or send a message be here ?
   public sendMessage (stringMessage: string) {
+    console.log("sendMessage");
+
     let message: WordGameMessage;
 
     console.log('send message');
@@ -474,6 +485,7 @@ export class WordGameMulti {
       const wordGuessMessage: WordGuessMessage = {
         word: stringMessage,
         sequence: this.currentSequence,
+        language: this.wordGame.currentLanguage,
         playerId: this.localPlayer.user.peer.id,
       }
       message = {
@@ -539,6 +551,7 @@ export class WordGameMulti {
     switch (message.wordGameMessageType) {
       case WordGameMessageType.StartingGame:
         
+        // Info : everything is handled here
         this.gameStarted = true;
         this.clearTimer();
 
@@ -845,7 +858,7 @@ export class WordGameMulti {
 
       this.players = newPlayers;
 
-      if (!isMessage) {
+      if (!isMessage && newPlayers.length !== 0) {
         const removePlayerMessage: RemovePlayerMessage = {
           playerId: id,
         }
@@ -914,6 +927,21 @@ export class WordGameMulti {
       case 'winningScore':
         this.settings.winningScore = Number.parseInt(propertyValue, 10);
         break;
+      case 'language':
+        // Info : for now, word game is handling the language state of the sequence
+        switch(propertyValue) {
+          case 'fra':
+          case 'french':
+            this.settings.language = "fra";
+            break;
+          case 'eng':
+          case 'english':
+            this.settings.language = "eng";
+            break;
+          default:
+            throw new Error(`unknown language '${propertyValue}'`);
+        }
+        return;
       default:
         throw new Error('key ' + propertyName + ' is unknown');
     }
@@ -973,6 +1001,8 @@ export class WordGameMulti {
 
     this.p2pRoom.broadcastApplicationMessage(message);
   }
+
+  protected before
 
   // #endregion
 

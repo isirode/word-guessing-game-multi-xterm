@@ -5,7 +5,8 @@
   "source": "public/index.html",
   "scripts": {
     "start": "parcel --no-cache",
-    "prebuild": "rimraf dist",
+    "prestart": "npm link log4j2-typescript && enviro",
+    "prebuild": "npm link log4j2-typescript && enviro && rimraf dist",
     "build": "parcel build --no-optimize --no-scope-hoist --public-url ./",
     "test": "jest --config jest.config.js"
   },
@@ -15,6 +16,7 @@
     "cmdy": "^1.4.6",
     "commander": "^10.0.0",
     "dexie": "^3.2.3",
+    "emittery": "^1.0.1",
     "p-wait-for": "^5.0.2",
     "peerjs": "^1.3.3",
     "pure-rand": "^6.0.1",

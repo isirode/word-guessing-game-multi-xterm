@@ -1,26 +1,26 @@
-import { Awaitable, CmdDefinition, CmdResult } from "cmdy";
+import { CmdResult } from "cmdy";
 import { CmdDefinitionImpl } from "./CmdDefinitionImpl";
-import { force } from "./Flags";
-import { P2PRoom } from "../../domain/P2PRoom";
-import { RoomManager } from "../../domain/RoomManager";
 import { WordGameMulti } from "../../domain/WordGameMulti";
-
-// export type LeaveGameHandler = () => void;
-
-export interface LeaveGameEvents {
-  onLeaveGame(): void;
-}
+import { Logger } from "word-guessing-game-common";
+import { Events, GameCommand } from "../domain/GameCommand";
+import Emittery from "emittery";
 
 export class LeaveGameCmd extends CmdDefinitionImpl {
 
   wordGameMulti: WordGameMulti;
-  leaveGameEvents: LeaveGameEvents;
+  
+  gameCommand: GameCommand;
 
-  constructor(wordGameMulti: WordGameMulti, leaveGameEvents: LeaveGameEvents) {
+  get gameEvents(): Emittery<Events> {
+    return this .gameCommand.events;
+  }
+
+  constructor(logger: Logger, wordGameMulti: WordGameMulti) {
     super();
 
     this.wordGameMulti = wordGameMulti;
-    this.leaveGameEvents = leaveGameEvents;
+    
+    this.gameCommand = new GameCommand(logger, undefined);
 
     this.name = "/leave";
     this.description = "Allow to leave the game";
@@ -36,15 +36,7 @@ export class LeaveGameCmd extends CmdDefinitionImpl {
     console.log(cmd.flags);
     console.log(cmd.valueFlags);
 
-    await this.wordGameMulti.leave();
-
-    // TODO : transfer ownership
-    // TODO : acquire ownership command
-    // wordGameMulti = undefined;
-
-    this.leaveGameEvents.onLeaveGame();
-
-    console.log("has left");
+    await this.gameCommand.leaveGame(this.wordGameMulti);
   }
 
 }
