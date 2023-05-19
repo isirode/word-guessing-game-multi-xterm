@@ -1,5 +1,5 @@
 import { Logger } from "word-guessing-game-common";
-import { IRoom, P2PRoom, RoomService } from "peerjs-room";
+import { IRoom, P2PRoom, RoomService, User } from "peerjs-room";
 import { Peer } from 'peerjs';
 import Emittery from "emittery";
 
@@ -128,6 +128,25 @@ export class RoomCommand {
     this.events.emit('leavedRoom');
 
     console.log("has left");
+  }
+
+  whisper(id: string | undefined, name: string | undefined, message: string, p2pRoom: P2PRoom) {
+    if (id !== undefined) {
+      const user: User | undefined = p2pRoom.getUserByPeerId(id);
+      if (user === undefined) {
+        this.logger.writeLn(`The user of id '${id}' is not present in the room`);
+        return;
+      }
+    }
+    if (name !== undefined) {
+      const user: User | undefined = p2pRoom.getUserByName(name);
+      if (user === undefined) {
+        this.logger.writeLn(`The user of name '${id}' is not present in the room`);
+        return;
+      }
+      p2pRoom.sendTextMessage(user, message);
+    }
+    throw new Error(`either id or the name of the user need to be provided`);
   }
 
 }

@@ -497,7 +497,7 @@ export class WordGameMulti {
       }
 
     } else {
-      this.p2pRoom.sendMessage(stringMessage);
+      this.p2pRoom.broadcastTextMessage(stringMessage);
     }
 
     // this.pushMessage(new Message('me', stringMessage, ''))

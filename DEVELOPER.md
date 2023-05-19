@@ -28,7 +28,7 @@ Your code will be posted using the same license as this project.
   - [x] Consecutive runs
   - [ ] Simultaneus runs
   - [ ] Score
-    - [ ] Score per word length
+    - [x] Score per word length
     - [ ] Score per word
     - [ ] Removing score
     - [ ] Health system

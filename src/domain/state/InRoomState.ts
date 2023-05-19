@@ -11,6 +11,7 @@ import { Events, RoomCommand } from "../../commands/domain/RoomCommand";
 import Emittery from "emittery";
 import { WordGameMultiInitializer, Events as GameEvents, GameCommand } from "../../commands/domain/GameCommand";
 import { RoomAdminCmd } from "../../commands/cmdy/RoomAdminCmd";
+import { WhisperCmd } from "../../commands/cmdy/WhisperCmd";
 
 export class InRoomState implements State {
   
@@ -49,6 +50,7 @@ export class InRoomState implements State {
     this.roomCommand = new RoomCommand(logger, roomManager, undefined);
     const leave = new LeaveRoomCmd(this.roomCommand, p2pRoom, roomManager);
     const admin = new RoomAdminCmd(p2pRoom);
+    const whisper = new WhisperCmd(this.roomCommand, p2pRoom);
 
     this.gameCmd = new StartGameCmd(logger, wordGameMultiInitializer);
 
@@ -74,7 +76,8 @@ export class InRoomState implements State {
           this.gameCmd,
           leave,
           connectionCmd,
-          admin
+          admin,
+          whisper
       ],
       flags: [
           // version
@@ -134,7 +137,7 @@ export class InRoomState implements State {
         input.value = "";
       }
     } else {
-      this.p2pRoom.sendMessage(text);
+      this.p2pRoom.broadcastTextMessage(text);
 
       // FIXME : find a way to ensure this is called correctly
       input.value = "";
