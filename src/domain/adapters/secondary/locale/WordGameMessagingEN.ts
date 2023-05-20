@@ -2,10 +2,29 @@ import { IWordGameMessaging } from "../../../../domain/ports/secondary/locale/IW
 import { WordGameMessageType } from '../../../../domain/models/Message';
 import { Player } from "../../../models/Player";
 import { IWordGameMultiSettings } from "../../../settings/IWordGameMultiSettings";
+import { User } from "peerjs-room";
 
 export class WordGameMessagingEN implements IWordGameMessaging {
   formatAdminActionAttempted (playerName: string, roomMessageType: WordGameMessageType): string {
     return `player ${playerName} has attempted to manage the game but is not an admin of the room (${roomMessageType})`
+  }
+
+  // TODO : indicate the timeout here
+  formatJoinGameRequested(initializer: User, responseTimeout: number, language: string, players: Player[], isSelf: boolean) {
+    let message = `User ${initializer.name} is starting a game (language: ${language}, players: ${players.map(x => x.user.name).join(',')})`;
+    if (!isSelf) {
+      message += `
+      You can join by typing '/join'`
+    }
+    message += `\r\nThe game will start in ${responseTimeout / 1000} seconds`
+    return message;
+  }
+
+  formatInitGame (initializer: User, responseTimeout: number, language: string, players: Player[], isSelf: boolean): string {
+    let message = `Intializing game (initializer: ${initializer.name}, language: ${language}, players: ${players.map(x => x.user.name).join(',')})`;
+    // TODO : log something like 'await response of player.name ?
+    message += `\r\nThe game will start in ${responseTimeout / 1000} seconds`
+    return message;
   }
 
   formatStartingGame (language: string, players: Player[]): string {

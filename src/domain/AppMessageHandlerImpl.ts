@@ -4,52 +4,53 @@ import { StartingGameMessage, WordGameMessage, WordGameMessageType } from "./mod
 import { AnyMessage, Message, User, RoomService } from "peerjs-room";
 import { WordGameMulti } from "./WordGameMulti";
 import { WordGameMultiInitializer } from "../commands/domain/GameCommand";
+import Emittery from "emittery";
 
 // FIXME : there is another definition doing the same thing
 // We should try to clean up this
 export type OnStartedGame = (wordGameMulti: WordGameMulti) => void;
+export interface Events {
+  onInitializedGame: {wordGameMulti: WordGameMulti};
+}
 
 export class AppMessageHandlerImpl {
 
   logger: Logger;
   roomManager: RoomService;
   wordGameMultiInitializer: WordGameMultiInitializer;
-  onStartedGame: OnStartedGame;
 
-  constructor(logger: Logger, roomManager: RoomService, wordGameMultiInitializer: WordGameMultiInitializer, onStartedGame: OnStartedGame) {
+  events: Emittery<Events> = new Emittery();
+
+  constructor(logger: Logger, roomManager: RoomService, wordGameMultiInitializer: WordGameMultiInitializer) {
     this.logger = logger;
     this.roomManager = roomManager;
     this.wordGameMultiInitializer = wordGameMultiInitializer;
-    this.onStartedGame = onStartedGame;
   }
 
-  onAppMessage(user: User, appMessage: AnyMessage, root: Message): void {
+  async onAppMessage(user: User, appMessage: AnyMessage, root: Message): Promise<void> {
+    console.log('onAppMessage', user, appMessage, root);
     // this.logger.writeLn(`(${formatPeerName(user.name)}) : ${formatWarn("received an application level message but there is no handling for this")}`);
 
-    // Info : we try to start the game if necessary
     // TODO : another phase / messaging stack for this
-    // pick game or something
-    if (user.peer.id === this.roomManager.currentRoom.roomOwner.id) {
+    const wordGameMessage: WordGameMessage = WordGameMulti.getWordGameMessage(appMessage);
+
+    // Info : we try to start the game if necessary
+    if (wordGameMessage.wordGameMessageType === WordGameMessageType.InitGame) {
       
-      const wordGameMessage: WordGameMessage = WordGameMulti.getWordGameMessage(appMessage);
+      const startingGameMessage = wordGameMessage.payload as StartingGameMessage;
 
-      if (wordGameMessage.wordGameMessageType === WordGameMessageType.StartingGame) {
-        // if (wordGameMulti !== null) {
-        //   console.warn("there is an error with the state of the application");
-        // }
-        const startingGameMessage = wordGameMessage.payload as StartingGameMessage;
+      let wordGameMulti = this.wordGameMultiInitializer.instantiate(startingGameMessage.lang);
 
-        let wordGameMulti = this.wordGameMultiInitializer(startingGameMessage.lang);
+      await this.events.emit('onInitializedGame', {wordGameMulti});
 
-        wordGameMulti.handleAppMessage(user, appMessage, root);
+      console.log('onInitializedGame emitted');
 
-        this.onStartedGame(wordGameMulti);
+      wordGameMulti.handleAppMessage(user, appMessage, root);
 
-      } else {
-        // logger.writeLn(`(${formatPeerName(user.name)}) : ${formatWarn("received an application level message but there is no handling for this")}`);
-        console.warn("there is an error with the state of the application");
-        console.warn(appMessage, wordGameMessage);
-      }
+    } else {
+      // logger.writeLn(`(${formatPeerName(user.name)}) : ${formatWarn("received an application level message but there is no handling for this")}`);
+      console.warn("there is an error with the state of the application");
+      console.warn(appMessage, wordGameMessage);
     }
   }
 }

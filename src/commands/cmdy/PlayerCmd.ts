@@ -90,11 +90,15 @@ export class PlayerCmd extends CmdDefinitionImpl {
   logger: Logger;
   wordGameMulti: WordGameMulti;
 
+  listPlayersCmd: ListPlayersCmd;
+
   constructor(logger: Logger, wordGameMulti: WordGameMulti) {
     super();
 
     this.logger = logger;
     this.wordGameMulti = wordGameMulti;
+
+    this.listPlayersCmd = new ListPlayersCmd(logger, wordGameMulti);
 
     this.name = "/players";
     this.description = "Command for the management of the players";
@@ -103,6 +107,10 @@ export class PlayerCmd extends CmdDefinitionImpl {
       new ListPlayersCmd(logger, wordGameMulti),
       new RemovePlayerCmd(logger, wordGameMulti),
     ]
+
+    this.exe = (cmd) => {
+      this.listPlayersCmd.exe(cmd);
+    }
 
   }
 

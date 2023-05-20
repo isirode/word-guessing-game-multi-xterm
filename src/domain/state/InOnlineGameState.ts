@@ -11,12 +11,15 @@ import { ConnectionCmd } from "../../commands/cmdy/ConnectionCmd";
 import { LeaveGameCmd } from "../../commands/cmdy/LeaveGameCmd";
 import Emittery from "emittery";
 import { Events } from "../../commands/domain/GameCommand";
+import { JoinGameCmd } from "../../commands/cmdy/JoinGameCmd";
 
 export class InOnlineGameState implements State {
 
   logger: Logger;
   input: IVirtualInput;
   wordGameMulti: WordGameMulti;
+  // FIXME : we do it this way because the reference probably need to be hodl
+  wordGameLogger: any;
 
   root: CmdDefinition;
 
@@ -26,16 +29,18 @@ export class InOnlineGameState implements State {
     return this.leaveGameCmd.gameEvents;
   }
 
-  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomService, p2pRoom: P2PRoom, wordGameMulti: WordGameMulti) {
+  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomService, p2pRoom: P2PRoom, wordGameMulti: WordGameMulti, wordGameLogger: any) {
     this.logger = logger;
     this.input = input;
     this.wordGameMulti = wordGameMulti;
+    this.wordGameLogger = wordGameLogger;
 
     // TODO : leave game
     const players = new PlayerCmd(logger, wordGameMulti);
     const settings = new ModifySettingsCmd(logger, wordGameMulti);
     const connectionCmd = new ConnectionCmd(logger, p2pRoom, roomManager);
     this.leaveGameCmd = new LeaveGameCmd(logger, wordGameMulti);
+    const join = new JoinGameCmd(logger, wordGameMulti);
 
     this.root = {
       name: "",
@@ -45,6 +50,7 @@ export class InOnlineGameState implements State {
         settings,
         connectionCmd,
         this.leaveGameCmd,
+        join
       ],
       flags: [
           // version

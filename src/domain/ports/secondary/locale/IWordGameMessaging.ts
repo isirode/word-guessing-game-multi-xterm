@@ -1,3 +1,4 @@
+import { User } from 'peerjs-room';
 import { WordGameMessageType } from '../../../../../src/domain/models/Message'
 import { Player } from '../../../models/Player'
 import { IWordGameMultiSettings } from '../../../settings/IWordGameMultiSettings'
@@ -8,6 +9,9 @@ import { IWordGameMultiSettings } from '../../../settings/IWordGameMultiSettings
 
 export interface IWordGameMessaging {
   formatAdminActionAttempted (playerName: string, roomMessageType: WordGameMessageType): string;
+
+  formatJoinGameRequested(initializer: User, responseTimeout: number, language: string, players: Player[], isSelf: boolean): string;
+  formatInitGame (initializer: User, responseTimeout: number, language: string, players: Player[], isSelf: boolean): string;
   formatStartingGame (language: string, players: Player[]): string;
 
   formatPlayerHasWon(player: string, score: number, isSelf: boolean): string;

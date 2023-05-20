@@ -9,7 +9,7 @@ import { GuessResult, SupportedLanguages, WordGame } from 'word-guessing-lib';
 import { buildConfig } from './config/Config';
 import { createPeer } from './peer';
 import { PromptUpTerminal } from './term/PromptUpTerminal';
-import { WordGameMessageHandler, WordGameMulti } from './domain/WordGameMulti';
+import { WordGameMulti } from './domain/WordGameMulti';
 import { LocalUser, Message, P2PRoom, RenameUserMessage, TextMessage, User, IClient, Peer as DomainPeer, PeerJSServerClient, RoomService } from 'peerjs-room';
 import { ITimer } from './domain/models/Timer';
 import { IWordGameMultiSettings } from './domain/settings/IWordGameMultiSettings';
@@ -28,6 +28,10 @@ import { AppMessageHandlerImpl } from './domain/AppMessageHandlerImpl';
 import { SettingsStoreSingleton } from './domain/settings/SettingsStoreSingleton';
 import { RoomEventData } from './commands/domain/RoomCommand';
 import { ConsoleAppender, IAppender, IConfiguration, ILayout, ILogEvent, Level, LogManager, PupaLayout } from 'log4j2-typescript';
+import { Server } from 'peerjs-request-response';
+import { WordGameMultiInitializer } from './commands/domain/GameCommand';
+import { RoomMessageEventsLogger } from './domain/logging/RoomMessageEventsLogger';
+import { WordGameEventsLogger } from './domain/logging/WordGameEventsLogger';
 
 // TODO : fix the blink cursor
 
@@ -215,18 +219,18 @@ function getRoomPrefix(): string {
   return value;
 }
 
-function getFormattedRoomPrefix(): string {
-  let value = '';
-  if (isInRoom()) {
-    value += '(' + formatRoomName(roomService.currentRoom.roomName);
-    if (localUser !== null) {
-      value += ':' + formatPeerName(localUser.name) + ':' + formatPeerId(localUser.peer.id);
-      // TODO : log conditionally ID
-    }
-    value += ') : ';
-  }
-  return value;
-}
+// function getFormattedRoomPrefix(): string {
+//   let value = '';
+//   if (isInRoom()) {
+//     value += '(' + formatRoomName(roomService.currentRoom.roomName);
+//     if (localUser !== null) {
+//       value += ':' + formatPeerName(localUser.name) + ':' + formatPeerId(localUser.peer.id);
+//       // TODO : log conditionally ID
+//     }
+//     value += ') : ';
+//   }
+//   return value;
+// }
 
 function prompt() {
   // TODO : conditional \r\n, some errors have one at the end, it produce two carriage return
@@ -363,18 +367,18 @@ const green2Font = '\x1B[34m';// FIXME : should be green but is not
 const greyFont = '\x1B[8m';
 const yellowFont = '\x1B[226m';
 
-function formatRoomName(room: string) {
-  return green2Font + room + resetSequence;
-}
+// function formatRoomName(room: string) {
+//   return green2Font + room + resetSequence;
+// }
 
 // TODO : allow to select it
 function formatPeerName(peer: string) {
   return blueFont + peer + resetSequence;
 }
 
-function formatPeerId(peerId: string) {
-  return yellowFont + peerId + resetSequence;
-}
+// function formatPeerId(peerId: string) {
+//   return yellowFont + peerId + resetSequence;
+// }
 
 function formatWarn(text: string) {
   return orangeFont + text + resetSequence;
@@ -385,64 +389,6 @@ function formatError(text: string) {
 }
 
 const wordGameMessagingEN = new WordGameMessagingEN();
-
-// FIXME : move it to a adapter directory, move the interface to a port directory
-class WordMessageHandlerImpl implements WordGameMessageHandler {
-
-  user: User;
-  p2pRoom: P2PRoom;
-
-  constructor(user: User, p2pRoom: P2PRoom) {
-    this.user = user;
-    this.p2pRoom = p2pRoom;
-  }
-
-  isSelf(player: Player) {
-    return player.user.peer.id === this.user.peer.id;
-  }
-
-  onStartingGame (settings: IWordGameMultiSettings, players: Player[], admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatStartingGame(WordGame.getFullLanguage(settings.language), players)}`);
-    logger.writeLn(`${wordGameMessagingEN.formatSettings(settings)}`);
-  }
-  onPlayerWon (winner: Player, from: Player, admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatPlayerHasWon(winner.user.name, winner.score, this.isSelf(winner))}`);
-  }
-  onAdminActionAttempted (player: Player, messageType: WordGameMessageType, admin: Player): void {
-    logger.writeLn(`(${formatPeerName('administration')}) : ${wordGameMessagingEN.formatAdminActionAttempted(player.user.name, messageType)}`);
-  }
-  onSequenceToGuess (player: Player, sequence: string, timeToGuess: number, occurences: number, admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatPlayerMustGuessLetters(player.user.name, sequence, timeToGuess, occurences, this.isSelf(player))}`);
-  }
-  onGuessAttempt(playerGuessing: Player, word: string, sequence: string, admin: Player) {
-    logger.writeLn(`(admin:${formatPeerName(playerGuessing.user.name)}) : ${word}`);
-  }
-  onIncorrectGuess (playerGuessing: Player, word: string, sequence: string, reason: GuessResult, admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatIncorrectGuess(playerGuessing.user.name, word, this.isSelf(playerGuessing))}`);
-  }
-  onCorrectGuess (playerGuessing: Player, word: string, sequence: string, scoreAdded: number, reason: GuessResult, admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatCorrectGuess(playerGuessing.user.name, scoreAdded, this.isSelf(playerGuessing))}`);
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatCurrentScore(playerGuessing.user.name, playerGuessing.score, this.isSelf(playerGuessing))}`);
-  }
-  onGuessTimeout (player: Player, admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatTimeToGuessTimedOut(player.user.name, this.isSelf(player))}`);
-  }
-  onWordExample (example: string, sequence: string, admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatWordExample(example, sequence)}`);
-  }
-  onSettingsUpdated (newSettings: IWordGameMultiSettings, formerSettings: IWordGameMultiSettings, player: Player, admin: Player): void {
-    logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatSettingsWereUpdated(player.user.name)}`);
-    logger.writeLn(`${wordGameMessagingEN.formatSettings(newSettings)}`);
-  }
-  onPlayerRemoved(player: Player, from: Player, admin: Player | undefined) {
-    if (admin !== undefined) {
-      logger.writeLn(`(admin:${formatPeerName(admin.user.name)}) : ${wordGameMessagingEN.formatPlayerWasRemoved(player.user.name, this.isSelf(player))}`);
-    } else {
-      logger.writeLn(`(${formatPeerName('administration')}) : ${wordGameMessagingEN.formatPlayerWasRemoved(player.user.name, this.isSelf(player))}`);
-    }
-  }
-  
-}
 
 const animalNames = ['Dog', 'Bear', 'Duck', 'Cat', 'Turtle', 'Horse', 'Crocodile', 'Chicken', 'Dolphin'];
 
@@ -506,19 +452,22 @@ async function main() {
   console.log("Settings:");
   console.log(settings);
 
-  function wordGameInitializer(lang: string): WordGameMulti {
-    if (lang !== undefined) {
-      let finalLang: SupportedLanguages = lang as SupportedLanguages;
-      wordGame.overrideLanguage = finalLang;
+  const wordGameInitializer: WordGameMultiInitializer = {
+    instantiate(lang: string): WordGameMulti {
+      // FIXME : probably should be done in WordGameMulti
+      if (lang !== undefined) {
+        let finalLang: SupportedLanguages = lang as SupportedLanguages;
+        wordGame.overrideLanguage = finalLang;
+      }
+      // FIXME : the event handling should be done immediatly after
+      return new WordGameMulti(
+        roomService.currentRoom,
+        p2pRoom,
+        wordGame,
+        settings
+      );
     }
-    return new WordGameMulti(
-      roomService.currentRoom,
-      p2pRoom,
-      wordGame,
-      settings,
-      new WordMessageHandlerImpl(p2pRoom.localUser, p2pRoom)
-    );
-  }
+  };
 
   const rooms = peerJSClient.getRooms();
   console.log(rooms);
@@ -572,11 +521,97 @@ async function main() {
       name: getRandomName(),
     };
 
-    function onStartedGame(wordGameMulti: WordGameMulti): void {
+    logger.writeLn(`You joined the room as ${localUser.name} (${localUser.peer.id})`);
+
+    p2pRoom = new P2PRoom(localUser, room, animalNames);
+    const roomMessageEventsLogger = new RoomMessageEventsLogger(logger, room, localUser);
+    // technical
+    p2pRoom.events.on('connectionEstablished', ({connection, user}) => {
+      roomMessageEventsLogger.onConnectionEstablished(connection, user);
+    });
+    p2pRoom.events.on('connectionClosed', ({connection, user}) => {
+      roomMessageEventsLogger.onConnectionClosed(connection, user);
+    });
+    p2pRoom.events.on('connectionError', ({connection, user, error}) => {
+      roomMessageEventsLogger.onConnectionError(connection, user, error);
+    });
+    p2pRoom.events.on('missingConnections', ({missingConnections}) => {
+      roomMessageEventsLogger.onMissingConnections(missingConnections);
+    });
+    p2pRoom.events.on('allConnected', ({clients}) => {
+      roomMessageEventsLogger.onAllConnected();
+    });
+    // messaging
+    p2pRoom.events.on('textMessage', ({connection, user, text, textMessage, root}) => {
+      roomMessageEventsLogger.onTextMessage(connection, user, text, textMessage, root);
+    });
+    p2pRoom.events.on('renameUserMessage', ({connection, user, newName, formerName, renameUserMessage, root}) => {
+      roomMessageEventsLogger.onRenameUserMessage(connection, user, newName, formerName, renameUserMessage, root);
+    });
+    // app
+    const appMessageHandler = new AppMessageHandlerImpl(logger, roomService, wordGameInitializer);
+    appMessageHandler.events.on('onInitializedGame', ({wordGameMulti}) => {
+      console.log('onInitializedGame');
+      // FIXME : not the most accurate but this will do, is there anything better ?
+      onGameCreated(wordGameMulti);
+    });
+    p2pRoom.events.on('appMessage', ({user, appMessage, root}) => {
+      console.log('on appMessage', user, appMessage, root);
+      // TODO : create an enum for the states
+      if (stateManager.stateRegister.currentStateName === 'in-room') {
+        appMessageHandler.onAppMessage(user, appMessage, root);
+      } else if (stateManager.stateRegister.currentStateName !== 'in-online-game') {
+        console.warn(`state should not be '${stateManager.stateRegister.currentStateName}' at this stage`);
+      }
+    });
+
+    function onGameCreated(wordGameMulti: WordGameMulti, initializeGame?: boolean): void {
       console.log("onStartedGame : setting onlinegame state");
 
+      const wordGameEventsLogger = new WordGameEventsLogger(logger, localUser, p2pRoom, wordGameMessagingEN);
+      // FIXME : use the logging system for the logging
+      wordGameMulti.events.on('onJoinGameRequested', ({initializer, responseTimeout, settings, players, admin}) => {
+        wordGameEventsLogger.onJoinGameRequested(initializer, responseTimeout, settings, players, admin);
+      });
+      wordGameMulti.events.on('onGameInitialized', ({initializer, responseTimeout, settings, players, admin}) => {
+        wordGameEventsLogger.onInitGame(initializer, responseTimeout, settings, players, admin);
+      });
+      wordGameMulti.events.on('onStartingGame', ({initializer, settings, players, admin}) => {
+        wordGameEventsLogger.onStartingGame(initializer, settings, players, admin);
+      });
+      wordGameMulti.events.on('onAdminActionAttempted', ({player, messageType, admin}) => {
+        wordGameEventsLogger.onAdminActionAttempted(player, messageType, admin);
+      });
+      wordGameMulti.events.on('onSettingsUpdated', ({newSettings, formerSettings, player, admin}) => {
+        wordGameEventsLogger.onSettingsUpdated(newSettings, formerSettings, player, admin);
+      });
+      wordGameMulti.events.on('onPlayerRemoved', ({player, from, admin}) => {
+        wordGameEventsLogger.onPlayerRemoved(player, from, admin);
+      });
+      wordGameMulti.events.on('onSequenceToGuess', ({player, sequence, timeToGuess, occurrences, admin}) => {
+        wordGameEventsLogger.onSequenceToGuess(player, sequence, timeToGuess, occurrences, admin);
+      });
+      wordGameMulti.events.on('onGuessAttempt', ({playerGuessing, word, sequence, admin}) => {
+        wordGameEventsLogger.onGuessAttempt(playerGuessing, word, sequence, admin);
+      });
+      wordGameMulti.events.on('onGuessTimeout', ({player, admin}) => {
+        wordGameEventsLogger.onGuessTimeout(player, admin);
+      });
+      wordGameMulti.events.on('onIncorrectGuess', ({playerGuessing, word, sequence, reason, admin}) => {
+        wordGameEventsLogger.onIncorrectGuess(playerGuessing, word, sequence, reason, admin);
+      });
+      wordGameMulti.events.on('onWordExample', ({example, sequence, admin}) => {
+        wordGameEventsLogger.onWordExample(example, sequence, admin);
+      });
+      wordGameMulti.events.on('onCorrectGuess', ({playerGuessing, word, sequence, scoreAdded, reason, admin}) => {
+        wordGameEventsLogger.onCorrectGuess(playerGuessing, word, sequence, scoreAdded, reason, admin);
+      });
+      wordGameMulti.events.on('onPlayerWon', ({winner, from, admin}) => {
+        wordGameEventsLogger.onPlayerWon(winner, from, admin);
+      });
+
       // We are in game now
-      let inOnlineGameState = new InOnlineGameState(logger, vitualInput, roomService, p2pRoom, wordGameMulti);
+      let inOnlineGameState = new InOnlineGameState(logger, vitualInput, roomService, p2pRoom, wordGameMulti, wordGameEventsLogger);
 
       inOnlineGameState.gameEvents.on('leavedGame', () => {
         stateManager.stateRegister.setCurrentState('in-room', getInRoomState());
@@ -584,75 +619,11 @@ async function main() {
 
       // TODO : state should have a name, so that we can query it
       stateManager.stateRegister.setCurrentState('in-online-game', inOnlineGameState);
-    }
 
-    logger.writeLn(`You joined the room as ${localUser.name} (${localUser.peer.id})`);
-
-    const appMessageHandler = new AppMessageHandlerImpl(logger, roomService, wordGameInitializer, onStartedGame);
-
-    // TODO : move this elsewhere
-    const roomMessageHandler = {
-      // technical
-      onConnectionEstablished: function (connection: Peer.DataConnection, user: User): void {
-        logger.writeLn(`${getFormattedRoomPrefix()}A connection was established with ${user.name}:${user.peer.id}`);
-      },
-      onConnectionClosed: function (connection: Peer.DataConnection, user: User): void {
-        logger.writeLn(`${getFormattedRoomPrefix()}A connection was closed (user: ${user.name}:${user.peer.id})`);
-      },
-      onConnectionError: function (connection: Peer.DataConnection, user: User, error: Error): void {
-        logger.writeLn(`${getFormattedRoomPrefix()}${formatError(error.message)}`);
-      },
-      onMissingConnections: function (missingConnections: IClient[]): void {
-        logger.writeLn(`${getFormattedRoomPrefix()}Not able to connect to all users, missing users:`);
-        missingConnections.forEach((client: IClient) => {
-          logger.writeLn(`Client: ` + client.id);
-        });
-      },
-      onAllConnected: function (): void {
-        logger.writeLn(`${getFormattedRoomPrefix()}Successfully connected to all users of the room.`);
-      },
-      // messaging
-      onTextMessage: function (connection: Peer.DataConnection, user: User, text: string, textMessage: TextMessage, root: Message): void {
-        logger.writeLn(`(${formatRoomName(roomService.currentRoom.roomName)}):${user.name}:${user.peer.id}: ${text}`);
-      },
-      onRenameUserMessage: function (connection: Peer.DataConnection, user: User, newName: string, formerName: string, renameUserMessage: RenameUserMessage, root: Message): void {
-        logger.writeLn(`peer ${formatPeerName(connection.peer)} has renamed to ${newName} ` + (formerName.length === 0 ? '' : `(formerlly named ${formerName})`));
-      },
-    };
-
-    p2pRoom = new P2PRoom(localUser, room, animalNames);
-    // technical
-    p2pRoom.events.on('connectionEstablished', ({connection, user}) => {
-      roomMessageHandler.onConnectionEstablished(connection, user);
-    });
-    p2pRoom.events.on('connectionClosed', ({connection, user}) => {
-      roomMessageHandler.onConnectionClosed(connection, user);
-    });
-    p2pRoom.events.on('connectionError', ({connection, user, error}) => {
-      roomMessageHandler.onConnectionError(connection, user, error);
-    });
-    p2pRoom.events.on('missingConnections', ({missingConnections}) => {
-      roomMessageHandler.onMissingConnections(missingConnections);
-    });
-    p2pRoom.events.on('allConnected', ({clients}) => {
-      roomMessageHandler.onAllConnected();
-    });
-    // messaging
-    p2pRoom.events.on('textMessage', ({connection, user, text, textMessage, root}) => {
-      roomMessageHandler.onTextMessage(connection, user, text, textMessage, root);
-    });
-    p2pRoom.events.on('renameUserMessage', ({connection, user, newName, formerName, renameUserMessage, root}) => {
-      roomMessageHandler.onRenameUserMessage(connection, user, newName, formerName, renameUserMessage, root);
-    });
-    // app
-    p2pRoom.events.on('appMessage', ({user, appMessage, root}) => {
-      // TODO : create an enum for the states
-      if (stateManager.stateRegister.currentStateName === 'in-room') {
-        appMessageHandler.onAppMessage(user, appMessage, root)
-      } else if (stateManager.stateRegister.currentStateName !== 'in-online-game') {
-        console.warn(`state should not be '${stateManager.stateRegister.currentStateName}' at this stage`);
+      if (initializeGame) {
+        wordGameMulti.initGame();
       }
-    });
+    }
   
     if (localUser.peer.id === room.roomOwner.id) {
       logger.writeLn('You are admin of the room');
@@ -668,7 +639,9 @@ async function main() {
         localUser = undefined;
         stateManager.stateRegister.changeTo('offline');
       });
-      inRoomState.gameEvents.on('startedGame', onStartedGame);
+      inRoomState.gameEvents.on('createdGame', (wordGameMulti) => {
+        onGameCreated(wordGameMulti, true); 
+      });
       return inRoomState;
     }
   

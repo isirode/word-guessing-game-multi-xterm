@@ -1,8 +1,11 @@
 import { GuessResult, SupportedLanguages } from "word-guessing-lib";
 import { AnyMessage } from "peerjs-room";
 import { IWordGameMultiSettings } from "../settings/IWordGameMultiSettings";
+import { Request, Response } from "peerjs-request-response";
 
 export enum WordGameMessageType {
+  InitGame = 'init-game',
+  InitGameResponse = "init-game-response",
   StartingGame = 'starting-game',
   LettersToGuess = 'letters-to-guess',
   WordGuess = 'word-guess',
@@ -21,7 +24,10 @@ export function isRoomMessageTypeProtected (wordGameMessageType: WordGameMessage
       /*roomMessageType === WordGameMessageType.UpdatePlayerName ||
       roomMessageType === WordGameMessageType.WordExample*/
       wordGameMessageType === WordGameMessageType.WordGuess ||
-      wordGameMessageType === WordGameMessageType.RemovePlayer) {
+      wordGameMessageType === WordGameMessageType.RemovePlayer ||
+      wordGameMessageType === WordGameMessageType.InitGame ||
+      wordGameMessageType === WordGameMessageType.InitGameResponse ||
+      wordGameMessageType === WordGameMessageType.StartingGame) {
     return false;
   }
   return true;
@@ -39,8 +45,17 @@ export interface BaseWordGameMessage {
 
 }
 
-export interface ChatMessage extends BaseWordGameMessage {
-  message: string;
+// TODO : it should be init with the settings
+export interface InitGameMessage extends BaseWordGameMessage {
+  request: Request;
+  playersIds: string[];
+  lang: SupportedLanguages;
+}
+export interface InitGameResponseMessage extends BaseWordGameMessage {
+  response: Response;
+}
+export interface InitGameResponseBody {
+  willJoin: boolean;
 }
 export interface StartingGameMessage extends BaseWordGameMessage {
   playersIds: string[];
@@ -48,7 +63,7 @@ export interface StartingGameMessage extends BaseWordGameMessage {
 }
 export interface LettersToGuessMessage extends BaseWordGameMessage {
   letters: string;
-  occurences: number;
+  occurrences: number;
   timeToGuess: number;
   // FIXME : should it be 'peerId', 'playerPeerId' or keep it this way
   // It make it more difficult to maintain
@@ -108,6 +123,8 @@ export interface RemovePlayerMessage extends BaseWordGameMessage {
 export interface TransferGameAdminshipMessage extends BaseWordGameMessage {
   newAdminPlayerId: string;
 }
+
+
 
 // FIXME : what to do with these
 // I think they are not useful

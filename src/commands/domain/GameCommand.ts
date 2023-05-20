@@ -2,10 +2,12 @@ import { Logger } from "word-guessing-game-common";
 import { WordGameMulti } from "../../domain/WordGameMulti";
 import Emittery from "emittery";
 
-export type WordGameMultiInitializer = (lang: string) => WordGameMulti;
+export interface WordGameMultiInitializer {
+  instantiate(lang: string): WordGameMulti;
+}
 
 export interface Events {
-  startedGame: WordGameMulti;
+  createdGame: WordGameMulti;
   leavedGame: undefined;
 }
 
@@ -30,12 +32,9 @@ export class GameCommand {
     if (game === 'word' || game === 'word-guessr' || game === undefined) {
       console.log('yeah');
 
-      const game = this.wordGameMultiInitializer(lang);
+      const game = this.wordGameMultiInitializer.instantiate(lang);
 
-      // TODO : should be divided in two phases
-      game.startGame();
-
-      this.events.emit('startedGame', game);
+      this.events.emit('createdGame', game);
 
     } else {
       // TODO : format as a warn
@@ -52,6 +51,18 @@ export class GameCommand {
     // wordGameMulti = undefined;
     
     this.events.emit('leavedGame');
+
+    console.log("has left");
+  }
+
+  async joinGame(wordGameMulti: WordGameMulti) {
+    wordGameMulti.join();
+
+    // TODO : transfer ownership
+    // TODO : acquire ownership command
+    // wordGameMulti = undefined;
+    
+    // this.events.emit('leavedGame');
 
     console.log("has left");
   }

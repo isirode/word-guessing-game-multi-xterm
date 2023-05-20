@@ -43,6 +43,7 @@ export class StateRegister {
   setCurrentState(name: string, state: State) {
     this.currentState = state;
     this.currentStateName = name;
+    console.log(`Current state is now ${name}`, state);
   }
 
 }
