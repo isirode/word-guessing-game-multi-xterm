@@ -2,14 +2,14 @@ import { Logger } from "word-guessing-game-common";
 import { ENTER } from "../Keys";
 import { P2PRoom, RoomService } from "peerjs-room";
 import { WordGameMulti } from "../WordGameMulti";
-import { IVirtualInput } from "./IVirtualInput";
+import { IVirtualInput, NewCharacterEventData } from "./IVirtualInput";
 import { State } from "./State";
 import { CmdDefinition, parseCmd } from "cmdy";
 import { ModifySettingsCmd } from "../../commands/cmdy/WordGameSettingsCmd";
 import { PlayerCmd } from "../../commands/cmdy/PlayerCmd";
 import { ConnectionCmd } from "../../commands/cmdy/ConnectionCmd";
 import { LeaveGameCmd } from "../../commands/cmdy/LeaveGameCmd";
-import Emittery from "emittery";
+import Emittery, { UnsubscribeFunction } from "emittery";
 import { Events } from "../../commands/domain/GameCommand";
 import { JoinGameCmd } from "../../commands/cmdy/JoinGameCmd";
 
@@ -24,6 +24,8 @@ export class InOnlineGameState implements State {
   root: CmdDefinition;
 
   leaveGameCmd: LeaveGameCmd;
+
+  unsubscribeInputNewCharEvent: UnsubscribeFunction;
 
   get gameEvents(): Emittery<Events> {
     return this.leaveGameCmd.gameEvents;
@@ -61,13 +63,13 @@ export class InOnlineGameState implements State {
     this.bind();
   }
 
-  async handleData(char: string, input: IVirtualInput): Promise<void> {
+  async handleData({char, virtualInput}: NewCharacterEventData): Promise<void> {
     if (char !== ENTER) {
       return;
     }
     try {
       console.log("handleData");
-      const text = input.value;
+      const text = virtualInput.value;
       // FIXME : this is in common with InRoomState
       if (text.startsWith('/')) {
         console.log('starts with /, using cmdy');
@@ -115,6 +117,10 @@ export class InOnlineGameState implements State {
 
   bind() {
     console.log("binding");
-    this.input.onNewCharacter = (e, v) => this.handleData(e, v);
+    this.unsubscribeInputNewCharEvent = this.input.events.on('onNewCharacter', this.handleData.bind(this));
+  }
+
+  onExit() {
+    this.unsubscribeInputNewCharEvent();
   }
 }

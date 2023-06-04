@@ -36,11 +36,11 @@ export class StateRegister {
     } else {
       state = stateOrProvider;
     }
-    this.currentStateName = name;
-    this.currentState = state;
+    this.setCurrentState(name, state);
   }
 
   setCurrentState(name: string, state: State) {
+    this.currentState?.onExit();
     this.currentState = state;
     this.currentStateName = name;
     console.log(`Current state is now ${name}`, state);

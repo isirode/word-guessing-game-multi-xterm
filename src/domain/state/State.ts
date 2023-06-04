@@ -8,24 +8,8 @@ export enum StateEnum {
   Offline
 }
 
-// Note : when leaving state, it will be an interval when the new state is there but the scope is still the old one
-export interface StateChangeHandler {
-  onLeaveState: () => void;
-  changeState: (newState: State, formerState: State) => void;
-}
-
 export interface State {
-  // handleData: (e: string) => void;
-  // handleText: (e: string) => void;
+  // FIXME : can probably remove bind from the interface
   bind(): void;
-}
-
-export class EmptyState {
-  handleData(e: string): void {
-
-  }
-  
-  handleText(e: string): void {
-
-  }
+  onExit: () => void;
 }

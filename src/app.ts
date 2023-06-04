@@ -4,21 +4,19 @@ import { FitAddon } from 'xterm-addon-fit';
 import { OutputConfiguration } from 'commander';
 
 import { Logger, SupportedLangDatabases, WordDatabaseFactory } from 'word-guessing-game-common';
-import { GuessResult, SupportedLanguages, WordGame } from 'word-guessing-lib';
+import { SupportedLanguages, WordGame } from 'word-guessing-lib';
 
 import { buildConfig } from './config/Config';
 import { createPeer } from './peer';
 import { PromptUpTerminal } from './term/PromptUpTerminal';
 import { WordGameMulti } from './domain/WordGameMulti';
-import { LocalUser, Message, P2PRoom, RenameUserMessage, TextMessage, User, IClient, Peer as DomainPeer, PeerJSServerClient, RoomService } from 'peerjs-room';
+import { LocalUser, P2PRoom, Peer as DomainPeer, PeerJSServerClient, RoomService } from 'peerjs-room';
 import { ITimer } from './domain/models/Timer';
 import { IWordGameMultiSettings } from './domain/settings/IWordGameMultiSettings';
 import { WordGameMessagingEN } from './domain/adapters/secondary/locale/WordGameMessagingEN';
-import { WordGameMessageType } from './domain/models/Message';
 // import Peer = require('peerjs');
 // WARN : import this way because typescript cannot handle similar types but named differently
 import * as Peer from 'peerjs';
-import { Player } from './domain/models/Player';
 import { StateManager } from './domain/state/StateManager';
 import { VirtualInput } from './domain/state/VirtualInput';
 import { OfflineState } from './domain/state/OfflineState';
@@ -28,10 +26,11 @@ import { AppMessageHandlerImpl } from './domain/AppMessageHandlerImpl';
 import { SettingsStoreSingleton } from './domain/settings/SettingsStoreSingleton';
 import { RoomEventData } from './commands/domain/RoomCommand';
 import { ConsoleAppender, IAppender, IConfiguration, ILayout, ILogEvent, Level, LogManager, PupaLayout } from 'log4j2-typescript';
-import { Server } from 'peerjs-request-response';
 import { WordGameMultiInitializer } from './commands/domain/GameCommand';
 import { RoomMessageEventsLogger } from './domain/logging/RoomMessageEventsLogger';
 import { WordGameEventsLogger } from './domain/logging/WordGameEventsLogger';
+import { RpcService } from 'peerjs-rpc';
+import { PingService } from './domain/ping/PingService';
 
 // TODO : fix the blink cursor
 
@@ -256,19 +255,24 @@ function writeOut(output: string) {
   prompt();
 }
 
-// FIXME : print in red
-function writeErr(err: string | Error) {
-  writeNewLine();
+function writeDebug(message: string) {
+  writeLn('\x1b[2;1m' + message + '\x1b[0m');
+}
 
-  console.error(err);
+function writeWarn(message: string) {
+  writeLn('\x1b[33;1m' + message + '\x1b[0m');
+}
+
+function writeErr(err: string | Error) {
+  let message = '';
 
   if (err instanceof Error) {
-    writeLn(err.message);
+    message = err.message;
   } else {
-    writeLn(err);
+    message = err;
   }
 
-  prompt();
+  writeLn('\x1b[31;1m' + message + '\x1b[0m');
 }
 
 // TODO : print warn
@@ -284,12 +288,19 @@ const configuration: OutputConfiguration = {
   }
 };
 
-const logger: Logger = {
+interface ExtendedLogger extends Logger {
+  debug(message: string): void;
+  warn(message: string): void;
+}
+
+const logger: ExtendedLogger = {
   info: writeOut,
   error: writeErr,
   writeLn: writeLn,
   newLine: writeNewLine,
   prompt: prompt,
+  debug: writeDebug,
+  warn: writeWarn
 }
 
 class TermAppender implements IAppender {
@@ -303,9 +314,27 @@ class TermAppender implements IAppender {
   }
 
   handle(logEvent: ILogEvent): void {
-    logger.writeLn(this.layout.format(logEvent));
+    // TODO : use the filter mecanism here
+    if (logEvent.object.term) {
+      switch(logEvent.level) {
+        case Level.DEBUG:
+          // FIXME : another layout here
+          logger.debug(this.layout.format(logEvent));
+          break;
+        case Level.INFO:
+          logger.writeLn(this.layout.format(logEvent));
+          break;
+        case Level.WARN:
+          logger.warn(this.layout.format(logEvent));
+          break;
+        case Level.ERROR:
+          logger.error(this.layout.format(logEvent));
+          break;
+        default:
+          throw new Error(`unknown level '${logEvent.level}'`);
+      }
+    }
   }
-
 }
 
 const logConfiguration: IConfiguration = {
@@ -315,21 +344,21 @@ const logConfiguration: IConfiguration = {
   ],
   loggers: [
     {
-      name: "technical",
-      level: Level.INFO,
-      refs: [
-        {
-          ref: "console"
-        }
-      ]
-    },
-    {
-      name: "term",
+      name: "com.isirode.",
       level: Level.INFO,
       refs: [
         {
           ref: "term"
-        }
+        },
+      ]
+    },
+    {
+      name: "com.isirode.",
+      level: Level.DEBUG,
+      refs: [
+        {
+          ref: "console"
+        },
       ]
     }
   ]
@@ -523,7 +552,11 @@ async function main() {
 
     logger.writeLn(`You joined the room as ${localUser.name} (${localUser.peer.id})`);
 
-    p2pRoom = new P2PRoom(localUser, room, animalNames);
+    p2pRoom = new P2PRoom(localUser, room, animalNames, {
+      channelOptions: {
+        excludeChannelMessagesFromDataNotifications: true
+      }
+    });
     const roomMessageEventsLogger = new RoomMessageEventsLogger(logger, room, localUser);
     // technical
     p2pRoom.events.on('connectionEstablished', ({connection, user}) => {
@@ -564,6 +597,11 @@ async function main() {
         console.warn(`state should not be '${stateManager.stateRegister.currentStateName}' at this stage`);
       }
     });
+
+    // echo
+    const rpcService = new RpcService(p2pRoom);
+    const pingService = new PingService('ping');
+    const pingServiceRpc = rpcService.add(pingService);
 
     function onGameCreated(wordGameMulti: WordGameMulti, initializeGame?: boolean): void {
       console.log("onStartedGame : setting onlinegame state");
@@ -607,7 +645,9 @@ async function main() {
         wordGameEventsLogger.onCorrectGuess(playerGuessing, word, sequence, scoreAdded, reason, admin);
       });
       wordGameMulti.events.on('onPlayerWon', ({winner, from, admin}) => {
+        // TODO : implement auto play here
         wordGameEventsLogger.onPlayerWon(winner, from, admin);
+        stateManager.stateRegister.setCurrentState('in-room', getInRoomState());
       });
 
       // We are in game now
@@ -633,7 +673,7 @@ async function main() {
     console.log(peer.connections);
 
     function getInRoomState(): InRoomState {
-      const inRoomState = new InRoomState(logger, vitualInput, roomService, p2pRoom, wordGameInitializer);
+      const inRoomState = new InRoomState(logger, vitualInput, roomService, p2pRoom, pingServiceRpc, wordGameInitializer);
       inRoomState.roomEvents.on('leavedRoom', () => {
         p2pRoom = undefined;
         localUser = undefined;
@@ -655,7 +695,7 @@ async function main() {
   promptTerm.onData((char) => {
 
     vitualInput.feed(char);
-
+    // console.log((promptTerm as any)._core.buffer)
   });
 
   logger.prompt();

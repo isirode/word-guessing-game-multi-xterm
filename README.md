@@ -51,6 +51,9 @@ Nothing here yet.
 - Some functionalities are not present yet
 - It is a work in progress
 
+- It will not work in Firefox in private mode
+  - This is due to the game using the local storage, but local storage not being available in private browsing
+
 ## Partipating
 
 Open the [DEVELOPER.md](./DEVELOPER.md) section.

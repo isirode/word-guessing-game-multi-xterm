@@ -1,12 +1,12 @@
 import { Command, OutputConfiguration } from "commander";
 import { State } from "./State";
-import { IVirtualInput } from "./IVirtualInput";
+import { IVirtualInput, NewCharacterEventData } from "./IVirtualInput";
 import { DatabaseCommander, Logger, WordGameCommander } from "word-guessing-game-common";
 import { RoomCommander } from "../../commands/commander/RoomCommander";
 import { IWordDatabase, WordGame } from "word-guessing-lib";
 import { RoomService } from "peerjs-room";
 import { Events, PeerProvider } from "../../commands/domain/RoomCommand";
-import Emittery from 'emittery';
+import Emittery, { UnsubscribeFunction } from 'emittery';
 
 // TODO : arrow navigation in the commands
 
@@ -15,16 +15,13 @@ import Emittery from 'emittery';
 
 export class OfflineState implements State {
 
-  // need start game offline
-  // join room
-  // create room
-  // help
-
   input: IVirtualInput;
   program: Command;
   logger: Logger;
 
   roomCommander: RoomCommander;
+
+  unsubscribeInputNewCharEvent: UnsubscribeFunction;
 
   get roomEvents(): Emittery<Events> {
     return this.roomCommander.events;
@@ -74,7 +71,7 @@ export class OfflineState implements State {
     this.bind();
   }
 
-  onNewCharacter(char: string, virtualInput: IVirtualInput): void {
+  handleData({char, virtualInput}: NewCharacterEventData): void {
     switch (char) {
       case '\r': // Enter
         console.log(this);
@@ -123,7 +120,11 @@ export class OfflineState implements State {
   public bind() {
     // WARN : have to do it this way, otherwise 'this' will be the VirtualInput 
     // FIXME : find a better way
-    this.input.onNewCharacter = (char, virtualInput) => this.onNewCharacter(char, virtualInput);
+    this.unsubscribeInputNewCharEvent = this.input.events.on('onNewCharacter', this.handleData.bind(this));
+  }
+
+  onExit() {
+    this.unsubscribeInputNewCharEvent();
   }
 
 }

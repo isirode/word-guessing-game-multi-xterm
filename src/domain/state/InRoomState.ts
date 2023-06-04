@@ -5,13 +5,15 @@ import { StartGameCmd } from "../../commands/cmdy/StartGameCmd";
 import { P2PRoom, RoomService } from "peerjs-room";
 import { State } from "./State";
 import { CmdDefinition, parseCmd } from "cmdy";
-import { IVirtualInput } from "./IVirtualInput";
+import { IVirtualInput, NewCharacterEventData } from "./IVirtualInput";
 import { ENTER, ESC } from "../Keys";
 import { Events, RoomCommand } from "../../commands/domain/RoomCommand";
-import Emittery from "emittery";
+import Emittery, { UnsubscribeFunction } from "emittery";
 import { WordGameMultiInitializer, Events as GameEvents, GameCommand } from "../../commands/domain/GameCommand";
 import { RoomAdminCmd } from "../../commands/cmdy/RoomAdminCmd";
 import { WhisperCmd } from "../../commands/cmdy/WhisperCmd";
+import { PingCmd } from "../../commands/cmdy/PingCmd";
+import { IPingService } from "../ping/IPingService";
 
 export class InRoomState implements State {
   
@@ -25,6 +27,8 @@ export class InRoomState implements State {
   roomCommand: RoomCommand;
   gameCmd: StartGameCmd;
 
+  unsubscribeInputNewCharEvent: UnsubscribeFunction;
+
   get roomEvents(): Emittery<Events> {
     return this.roomCommand.events;
   }
@@ -34,7 +38,7 @@ export class InRoomState implements State {
   }
 
   // FIXME : replace peerjs peer by ours
-  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomService, p2pRoom: P2PRoom, wordGameMultiInitializer: WordGameMultiInitializer) {
+  constructor(logger: Logger, input: IVirtualInput, roomManager: RoomService, p2pRoom: P2PRoom, echoService: IPingService, wordGameMultiInitializer: WordGameMultiInitializer) {
     // need to be able to
     // leave
     // start game
@@ -51,6 +55,7 @@ export class InRoomState implements State {
     const leave = new LeaveRoomCmd(this.roomCommand, p2pRoom, roomManager);
     const admin = new RoomAdminCmd(p2pRoom);
     const whisper = new WhisperCmd(this.roomCommand, p2pRoom);
+    const ping = new PingCmd(this.roomCommand, echoService);
 
     this.gameCmd = new StartGameCmd(logger, wordGameMultiInitializer);
 
@@ -77,7 +82,8 @@ export class InRoomState implements State {
           leave,
           connectionCmd,
           admin,
-          whisper
+          whisper,
+          ping
       ],
       flags: [
           // version
@@ -88,12 +94,12 @@ export class InRoomState implements State {
     this.bind();
   }
 
-  async handleData(char: string, input: IVirtualInput): Promise<void> {
+  async handleData({char, virtualInput}: NewCharacterEventData): Promise<void> {
     // TODO : checkout for '//' as a way to send a message
     if (char !== ENTER) {
       return;
     }
-    const text = input.value;
+    const text = virtualInput.value;
     if (text.startsWith('/')) {
       console.log('starts with /, using cmdy');
       const argsForCmdy = [...text.trim().split(' ')]
@@ -134,20 +140,24 @@ export class InRoomState implements State {
 
         this.logger.prompt();
       } finally {
-        input.value = "";
+        virtualInput.value = "";
       }
     } else {
       this.p2pRoom.broadcastTextMessage(text);
 
       // FIXME : find a way to ensure this is called correctly
-      input.value = "";
+      virtualInput.value = "";
 
       this.logger.prompt();
     }
   }
 
   bind() {
-    this.input.onNewCharacter = (char: string, input: IVirtualInput) => this.handleData(char, input);
+    this.unsubscribeInputNewCharEvent = this.input.events.on('onNewCharacter', this.handleData.bind(this));
+  }
+
+  onExit() {
+    this.unsubscribeInputNewCharEvent();
   }
 
 }

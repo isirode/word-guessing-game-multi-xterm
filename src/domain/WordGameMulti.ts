@@ -235,8 +235,8 @@ export class WordGameMulti {
     });
 
     const self = this;
-    const mapper: IClientMapper = {
-      map: function (data: any): Response {
+    const mapper: IClientMapper<undefined, InitGameResponseBody> = {
+      unwrap: function (data: any): Response<InitGameResponseBody> {
         // FIXME : this is ugly
         const message: Message = data as Message;
         if (message.type === MessageType.App) {
@@ -245,7 +245,7 @@ export class WordGameMulti {
             const wordGameMessage = appMessage.payload as WordGameMessage;
             if (wordGameMessage.wordGameMessageType === WordGameMessageType.InitGameResponse) {
               const initGameMessageResponse = wordGameMessage.payload as InitGameResponseMessage;
-              return initGameMessageResponse.response;
+              return initGameMessageResponse.response as Response<InitGameResponseBody>;
             }
           }
         }
@@ -291,7 +291,7 @@ export class WordGameMulti {
 
       const client = new Client(connection._connection, mapper);
 
-      const request: Request = {
+      const request: Request<undefined> = {
         id: uuidv4(),
         timeout: gameInitTimeout,
         content: undefined

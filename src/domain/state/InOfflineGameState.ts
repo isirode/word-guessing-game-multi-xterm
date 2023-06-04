@@ -1,8 +1,9 @@
 import { Logger } from "word-guessing-game-common";
 import { State } from "./State";
-import { IVirtualInput } from "./IVirtualInput";
+import { IVirtualInput, NewCharacterEventData } from "./IVirtualInput";
 import { GuessResult, WordGame } from "word-guessing-lib";
 import { CTRL_C, ESC } from "../Keys";
+import { UnsubscribeFunction } from "emittery";
 
 export interface OfflineGameEvents {
   leaveGame(): void;
@@ -17,6 +18,8 @@ export class InOfflineGameState implements State {
 
   offlineGameEvents: OfflineGameEvents;
 
+  unsubscribeInputNewCharEvent: UnsubscribeFunction;
+
   constructor(logger: Logger, input: IVirtualInput, wordGame: WordGame, offlineGameEvents: OfflineGameEvents) {
     this.logger = logger;
     this.input = input;
@@ -26,7 +29,7 @@ export class InOfflineGameState implements State {
     this.bind();
   }
 
-  handleData(char: string, virtualInput: IVirtualInput): void {
+  handleData({char, virtualInput}: NewCharacterEventData): void {
     switch (char) {
       case ESC:
       case CTRL_C:
@@ -71,7 +74,11 @@ export class InOfflineGameState implements State {
   }
 
   bind() {
-    this.input.onNewCharacter = (e, v) => this.handleData(e, v);
+    this.unsubscribeInputNewCharEvent = this.input.events.on('onNewCharacter', this.handleData.bind(this));
+  }
+
+  onExit() {
+    this.unsubscribeInputNewCharEvent();
   }
 
 }

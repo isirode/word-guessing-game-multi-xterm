@@ -49,6 +49,14 @@ Your code will be posted using the same license as this project.
     - [ ] System to select only active users
   - [x] /settings
     - [ ] Mutualize the system
+  - [x] /ping
+    - [ ] Indicate the latencies
+    - [ ] Indicate the latency per user
+    - [ ] Allow to pick an user
+
+- [ ] Command history
+  - Need to be done as a plugin
+  - Maybe as a plugin of the virtual input
 
 - [ ] Game
   - [x] Start a game
@@ -210,6 +218,8 @@ Your code will be posted using the same license as this project.
 
 - Allow to reference the HTTPS remote host as the PeerJS server
 
+- Use Zod
+
 ## Info (parcel / typescript import pathing)
 
 https://parceljs.org/features/dependency-resolution/#tilde-specifiers
@@ -230,3 +240,9 @@ index.d.ts(5, 1): This module is declared with 'export =', and can only be used 
 import * as PeerJS from 'peerjs' : do not import the constructor, runtime issue
 
  caught TypeError: _peerjs is not a constructor
+
+## Design
+
+### State management
+
+- Want to be able to add / remove command handling (maybe)
